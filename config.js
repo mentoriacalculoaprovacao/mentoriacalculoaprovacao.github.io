@@ -4,5 +4,5 @@
 //   Vazio = o app aceita só o código de acesso. O mesmo ID precisa estar na aba "App — configurações" (célula B37).
 window.CONFIG = {
   API_URL: 'https://script.google.com/macros/s/AKfycbzu65pzk9LJZDLTIQuhhbgtlxcMoVlLLjADOHDHz6ZrMQUzG0sbUbDWYGoHJqih0p3h_A/exec',
-  GOOGLE_CLIENT_ID: ''
+  GOOGLE_CLIENT_ID: '60146064569-nfhfn5dq2lkrrlpc5r5aoj5h0ipgo1ns.apps.googleusercontent.com'
 };

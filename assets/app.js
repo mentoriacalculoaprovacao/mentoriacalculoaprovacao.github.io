@@ -71,6 +71,7 @@
       erro.textContent = 'O login com Google ainda não está disponível. Tente de novo mais tarde.';
     }
     caixa.appendChild(erro);
+    caixa.appendChild(el('a', { class: 'link-privacidade', href: 'privacidade.html', text: 'Política de privacidade' }));
     app.appendChild(caixa);
   }
 
