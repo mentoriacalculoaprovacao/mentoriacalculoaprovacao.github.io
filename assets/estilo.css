@@ -133,3 +133,10 @@
   .aviso { background: #EEF4FF; border: 1px solid #D6E2FB; color: #23406E; border-radius: 12px; padding: 12px 14px; font-size: 14px; }
   .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--azul); color: #fff; padding: 11px 16px; border-radius: 12px; font-size: 14px; box-shadow: 0 6px 24px rgba(11,37,69,.25); z-index: 20; max-width: calc(100vw - 32px); }
   .toast.erro { background: var(--ruim); }
+  details.alternativa { margin-top: 4px; text-align: left; }
+  details.alternativa > summary { cursor: pointer; color: var(--acento); font-size: 13.5px; text-align: center; list-style: none; padding: 6px 0; }
+  details.alternativa > summary::-webkit-details-marker { display: none; }
+  .form-codigo { display: grid; gap: 10px; margin-top: 8px; }
+  .link-voltar { background: none; border: 0; color: var(--acento); font: inherit; font-size: 13.5px; cursor: pointer; padding: 6px; }
+  .aviso.vincular { display: grid; gap: 8px; justify-items: start; }
+  .aviso.vincular .google-botao { justify-content: flex-start; }

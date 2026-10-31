@@ -7,7 +7,8 @@
   var topoDir = document.getElementById('topo-dir');
   var atualizadoEl = document.getElementById('atualizado');
   var CHAVE_SESSAO = 'mentoria_sessao';
-  var est = { sessao: null, inicio: null, cache: {}, atual: null, aba: 'painel', filtro: 'todos', busca: '' };
+  var est = { sessao: null, inicio: null, cache: {}, atual: null, aba: 'painel', filtro: 'todos', busca: '', cfg: { aceitaCodigo: true, google: false } };
+  function googleLigado() { return !!(C.GOOGLE_CLIENT_ID && est.cfg.google); }
 
   function ler(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function gravar(k, v) { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { } }
@@ -49,47 +50,101 @@
     app.innerHTML = '';
     var erro = el('p', { class: 'erro', role: 'alert', text: msg || '' });
     var caixa = el('div', { class: 'entrada' }, [el('h1', { text: 'Mentoria' })]);
-    if (C.GOOGLE_CLIENT_ID) {
-      caixa.appendChild(el('p', { class: 'sub centro', text: 'Entre com a conta Google cadastrada na mentoria (o e-mail que você usou no diagnóstico).' }));
+    var google = googleLigado();
+    if (google) {
+      caixa.appendChild(el('p', { class: 'sub centro', text: 'Entre com a conta Google cadastrada na mentoria.' }));
       var lugar = el('div', { class: 'google-botao' });
       caixa.appendChild(lugar);
-      prepararGoogle(lugar, erro);
-      caixa.appendChild(el('div', { class: 'ou', text: 'ou use seu código de acesso' }));
-    } else {
-      caixa.appendChild(el('p', { class: 'sub centro', text: 'Digite o código de acesso que está na aba "Meu painel" da sua planilha de mentoria (mentor: na planilha "Mentorados").' }));
+      botaoGoogle(lugar, erro, function (cred) { entrar({ credencial: cred }); });
     }
-    var inp = el('input', { type: 'text', maxlength: '9', placeholder: 'XXXX-XXXX', autocomplete: 'off', autocapitalize: 'characters', 'aria-label': 'Código de acesso' });
-    inp.value = codigo || '';
-    var bt = el('button', { class: 'botao' + (C.GOOGLE_CLIENT_ID ? ' sec2' : ''), type: 'button', text: 'Entrar com o código' });
-    var ir = function () {
-      var c = inp.value.trim();
-      if (c.replace(/[^A-Za-z0-9]/g, '').length < 8) { erro.textContent = 'Digite os 8 caracteres do seu código.'; return; }
-      entrar({ codigo: c });
-    };
-    bt.onclick = ir;
-    inp.onkeydown = function (ev) { if (ev.key === 'Enter') ir(); };
-    caixa.appendChild(inp); caixa.appendChild(bt); caixa.appendChild(erro);
+    if (est.cfg.aceitaCodigo) {
+      var area = formCodigo(codigo, 'Entrar com o código', function (c) { entrar({ codigo: c }); }, erro);
+      if (google) {
+        var det = el('details', { class: 'alternativa' }, [el('summary', { text: 'Não consegue entrar com o Google? Use seu código de acesso' }), area]);
+        if (codigo) det.open = true;
+        caixa.appendChild(det);
+      } else {
+        caixa.appendChild(el('p', { class: 'sub centro', text: 'Digite o código de acesso que está na aba "Meu painel" da sua planilha de mentoria (mentor: na planilha "Mentorados").' }));
+        caixa.appendChild(area);
+      }
+    } else if (!google) {
+      erro.textContent = 'O login com Google ainda não está disponível. Tente de novo mais tarde.';
+    }
+    caixa.appendChild(erro);
     app.appendChild(caixa);
   }
 
-  function prepararGoogle(lugar, erro) {
+  function formCodigo(codigo, rotulo, enviar, erro, principal) {
+    var inp = el('input', { type: 'text', maxlength: '9', placeholder: 'XXXX-XXXX', autocomplete: 'off', autocapitalize: 'characters', 'aria-label': 'Código de acesso' });
+    inp.value = codigo || '';
+    var bt = el('button', { class: 'botao' + (googleLigado() && !principal ? ' sec2' : ''), type: 'button', text: rotulo });
+    var ir = function () {
+      var c = inp.value.trim();
+      if (c.replace(/[^A-Za-z0-9]/g, '').length < 8) { erro.textContent = 'Digite os 8 caracteres do seu código.'; return; }
+      enviar(c);
+    };
+    bt.onclick = ir;
+    inp.onkeydown = function (ev) { if (ev.key === 'Enter') ir(); };
+    return el('div', { class: 'form-codigo' }, [inp, bt]);
+  }
+
+  // Botão oficial "Fazer login com o Google" (Google Identity Services)
+  var googlePronto = false;
+  function botaoGoogle(lugar, erro, aoEntrar) {
     var tentativas = 0;
     (function esperar() {
       if (window.google && google.accounts && google.accounts.id) {
         google.accounts.id.initialize({
-          client_id: C.GOOGLE_CLIENT_ID, ux_mode: 'popup', auto_select: false,
-          callback: function (resp) { if (resp && resp.credential) entrar({ credencial: resp.credential }); }
+          client_id: C.GOOGLE_CLIENT_ID, ux_mode: 'popup', auto_select: false, context: 'signin',
+          callback: function (resp) { if (resp && resp.credential) aoEntrar(resp.credential); }
         });
+        googlePronto = true;
         google.accounts.id.renderButton(lugar, { theme: 'outline', size: 'large', shape: 'pill', text: 'signin_with', locale: 'pt-BR', width: 280 });
         return;
       }
-      if (++tentativas > 50) { erro.textContent = 'O login com Google não carregou. Use seu código de acesso ou recarregue a página.'; return; }
+      if (++tentativas > 50) { erro.textContent = 'O login com Google não carregou. Recarregue a página' + (est.cfg.aceitaCodigo ? ' ou use seu código de acesso.' : '.'); return; }
       setTimeout(esperar, 200);
     })();
   }
 
+  // Primeiro acesso: conta Google ainda não ligada à planilha. O código confirma quem é a pessoa (uma única vez).
+  function telaVincular(credencial, email, msg) {
+    app.innerHTML = '';
+    var erro = el('p', { class: 'erro', role: 'alert', text: msg || '' });
+    var caixa = el('div', { class: 'entrada' }, [
+      el('h1', { text: 'Primeiro acesso' }),
+      el('p', { class: 'sub centro', text: 'A conta ' + email + ' ainda não está ligada à mentoria. Digite seu código de acesso (aba "Meu painel" da sua planilha) uma única vez para vincular esta conta Google. Depois, é só entrar com o Google.' }),
+      formCodigo('', 'Vincular minha conta Google', function (c) { vincular({ credencial: credencial, codigo: c }, email); }, erro, true),
+      el('button', { class: 'link-voltar', type: 'button', text: 'Usar outra conta Google' }),
+      erro
+    ]);
+    caixa.querySelector('.link-voltar').onclick = function () { telaEntrada(''); };
+    app.appendChild(caixa);
+  }
+
+  function vincular(dados, email) {
+    carregando('Vinculando sua conta Google…');
+    api('vincular', dados).then(function (d) {
+      if (!d || !d.ok) {
+        var m = {
+          codigo: 'Código não encontrado. Confira na aba "Meu painel" da sua planilha.',
+          emailEmUso: 'A conta ' + (d && d.email) + ' já está ligada a outro aluno. Entre com a sua própria conta Google ou fale com seu mentor.',
+          login: 'Seu login com o Google expirou. Clique em "Fazer login com o Google" de novo.',
+          codigoDesligado: 'O acesso por código foi encerrado. Peça ao seu mentor para cadastrar este e-mail.',
+          sessao: 'Sua sessão expirou. Entre de novo.'
+        }[d && d.erro] || 'Não foi possível vincular agora. Tente de novo em instantes.';
+        if (dados.codigo && d && (d.erro === 'codigo')) telaVincular(dados.credencial, email, m); else telaEntrada(m);
+        return;
+      }
+      est.sessao = d.sessao; gravar(CHAVE_SESSAO, d.sessao);
+      aviso('Conta Google vinculada! Da próxima vez, é só entrar com o Google.');
+      iniciar();
+    }).catch(function () { telaEntrada('Não foi possível conectar agora. Tente de novo.'); });
+  }
+
   var MSG_ENTRADA = {
     codigo: 'Código não encontrado. Confira na aba "Meu painel" da sua planilha.',
+    codigoDesligado: 'O acesso por código foi encerrado. Entre com a sua conta Google.',
     login: 'Não foi possível confirmar seu login com o Google. Tente de novo.',
     falha: 'Não foi possível entrar agora. Tente de novo em instantes.'
   };
@@ -97,8 +152,9 @@
     carregando('Entrando…');
     api('entrar', dados).then(function (d) {
       if (!d || !d.ok) {
+        if (d && d.erro === 'naoCadastrado' && d.podeVincular && dados.credencial) { telaVincular(dados.credencial, d.email, ''); return; }
         var m = d && d.erro === 'naoCadastrado'
-          ? 'O e-mail ' + d.email + ' não está cadastrado na mentoria. Entre com o e-mail que você usou no diagnóstico ou use seu código de acesso.'
+          ? 'A conta ' + d.email + ' não está cadastrada na mentoria. Entre com a conta Google que você usou no diagnóstico ou peça ao seu mentor para cadastrar este e-mail. Não tem conta Google? Dá para criar uma com o seu e-mail atual em accounts.google.com.'
           : MSG_ENTRADA[d && d.erro] || MSG_ENTRADA.falha;
         telaEntrada(m, dados.codigo);
         return;
@@ -124,11 +180,25 @@
       if (!d || !d.ok) { encerrar('Não foi possível carregar agora. Entre de novo.'); return; }
       est.inicio = d;
       montarTopo(d.quem);
-      if (d.papel === 'aluno') { P.montar(d.dados); return; }
+      if (d.papel === 'aluno') { P.montar(d.dados); avisoVincular(d.quem); return; }
       est.filtro = ler('mentoria_filtro') || 'todos';
       est.aba = ler('mentoria_aba') || 'painel';
       montarLista();
+      avisoVincular(d.quem);
     }).catch(function (e) { if (e.message !== 'sessao') { app.innerHTML = ''; app.appendChild(el('p', { class: 'carregando', text: 'Não foi possível carregar agora. Recarregue a página em instantes.' })); } });
+  }
+
+  function avisoVincular(quem) {
+    if (!quem || quem.via !== 'codigo' || !googleLigado()) return;
+    var erro = el('p', { class: 'erro', text: '' });
+    var lugar = el('div', { class: 'google-botao' });
+    var caixa = el('div', { class: 'aviso vincular' }, [
+      el('b', { text: 'Entre com o Google da próxima vez.' }),
+      el('span', { text: ' Vincule sua conta Google agora e não precisa mais do código (o acesso por código vai acabar).' }),
+      lugar, erro
+    ]);
+    app.insertBefore(caixa, app.firstChild);
+    botaoGoogle(lugar, erro, function (cred) { vincular({ credencial: cred, sessao: est.sessao }, ''); });
   }
 
   // ---------- Mentor e gestor: lista de alunos ----------
@@ -171,6 +241,7 @@
     function passaFiltro(x) {
       if (!gestor || est.filtro === 'todos') return true;
       if (est.filtro === 'sem') return !x.mentor;
+      if (est.filtro === 'semgoogle') return !x.google && !x.semPlanilha;
       return norm(x.mentor) === est.filtro;
     }
     function desenharFiltros() {
@@ -178,7 +249,9 @@
       filtros.innerHTML = '';
       var cont = {};
       d.alunos.forEach(function (x) { if (x.mentor) cont[norm(x.mentor)] = (cont[norm(x.mentor)] || 0) + 1; });
+      var semGoogle = d.alunos.filter(function (x) { return !x.google && !x.semPlanilha; }).length;
       var opcoes = [['todos', 'Todos', d.alunos.length], ['sem', 'Sem mentor', semMentor]];
+      if (googleLigado()) opcoes.push(['semgoogle', 'Sem login Google', semGoogle]);
       var nomes = {};
       d.alunos.forEach(function (x) { if (x.mentor && !nomes[norm(x.mentor)]) nomes[norm(x.mentor)] = x.mentor; });
       Object.keys(nomes).sort(function (a, b) { return nomes[a].localeCompare(nomes[b], 'pt-BR'); })
@@ -240,6 +313,8 @@
     var titulo = el('h2', { class: 'nome-aluno' }, [x.aluno]);
     if (x.semPlanilha) titulo.appendChild(el('span', { class: 'selo-txt cinza', text: 'aguardando planilhas' }));
     else if (gestor && !x.mentor) titulo.appendChild(el('span', { class: 'selo-txt', text: 'sem mentor' }));
+    var item = (est.inicio.alunos || []).filter(function (y) { return y.id === x.id; })[0];
+    if (gestor && googleLigado() && item && !item.google && !x.semPlanilha) titulo.appendChild(el('span', { class: 'selo-txt cinza', text: 'ainda não entrou com Google' }));
     var sub = el('p', { class: 'sub' }, [
       el('span', { text: x.curso ? 'Rumo a ' + x.curso : '' }), el('span', { text: x.desde ? 'Na mentoria desde ' + x.desde : '' }),
       gestor && x.mentor ? el('span', { text: 'Mentor: ' + x.mentor }) : null]);
@@ -357,7 +432,11 @@
   }
   if (!C.API_URL) { telaEntrada('O app ainda não está configurado (falta o endereço do servidor).'); return; }
   var cod = codigoDaUrl();
-  if (cod) { entrar({ codigo: cod }); return; }
   est.sessao = ler(CHAVE_SESSAO);
-  if (est.sessao) iniciar(); else telaEntrada('');
+  api('config').then(function (c) { if (c && c.ok) est.cfg = { aceitaCodigo: !!c.aceitaCodigo, google: !!c.google }; })
+    .catch(function () { })
+    .then(function () {
+      if (cod && est.cfg.aceitaCodigo) { entrar({ codigo: cod }); return; }
+      if (est.sessao) iniciar(); else telaEntrada('');
+    });
 })();
