@@ -2,12 +2,12 @@
 // Toda regra de quem vê o quê fica no servidor (Apps Script, API.gs): esta página só mostra o que ele devolve.
 (function () {
   var C = window.CONFIG || {};
-  var P = window.Painel, el = P.el, norm = P.norm;
+  var P = window.Painel, R = window.Registros, el = P.el, norm = P.norm;
   var app = document.getElementById('app');
   var topoDir = document.getElementById('topo-dir');
   var atualizadoEl = document.getElementById('atualizado');
   var CHAVE_SESSAO = 'mentoria_sessao';
-  var est = { sessao: null, inicio: null, cache: {}, atual: null, aba: 'painel', filtro: 'todos', busca: '', cfg: { aceitaCodigo: true, google: false } };
+  var est = { sessao: null, inicio: null, cache: {}, atual: null, aba: 'painel', abaAluno: ler('mentoria_aba_aluno') || 'painel', filtro: 'todos', busca: '', cfg: { aceitaCodigo: true, google: false } };
   function googleLigado() { return !!(C.GOOGLE_CLIENT_ID && est.cfg.google); }
 
   function ler(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -27,6 +27,7 @@
 
   function carregando(txt) { app.innerHTML = ''; app.appendChild(el('p', { class: 'carregando', text: txt || 'Carregando…' })); }
   function aviso(txt, erro) {
+    Array.prototype.forEach.call(document.querySelectorAll('.toast'), function (x) { x.remove(); });
     var t = el('div', { class: 'toast' + (erro ? ' erro' : ''), role: 'status', text: txt });
     document.body.appendChild(t);
     setTimeout(function () { t.remove(); }, 4200);
@@ -181,7 +182,7 @@
       if (!d || !d.ok) { encerrar('Não foi possível carregar agora. Entre de novo.'); return; }
       est.inicio = d;
       montarTopo(d.quem);
-      if (d.papel === 'aluno') { P.montar(d.dados); avisoVincular(d.quem); return; }
+      if (d.papel === 'aluno') { montarAluno(); avisoVincular(d.quem); return; }
       est.filtro = ler('mentoria_filtro') || 'todos';
       est.aba = ler('mentoria_aba') || 'painel';
       montarLista();
@@ -200,6 +201,67 @@
     ]);
     app.insertBefore(caixa, app.firstChild);
     botaoGoogle(lugar, erro, function (cred) { vincular({ credencial: cred, sessao: est.sessao }, ''); });
+  }
+
+  // ---------- Aluno: três caixas (Meu painel · Simulados · Caderno de erros) ----------
+  var ICONES = {
+    painel: ['M4 19V10M10 19V5M16 19v-7M22 19H2'],
+    simulados: ['M9 5h11M9 12h11M9 19h11', 'M4 5l1 1 2-2M4 12l1 1 2-2M4 19l1 1 2-2'],
+    caderno: ['M4 5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2z', 'M9 8l6 6M15 8l-6 6']
+  };
+  function icone(nome) {
+    var s = P.sv('svg', { viewBox: '0 0 24 24', width: 22, height: 22, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' });
+    ICONES[nome].forEach(function (d) { P.sv('path', { d: d }, s); });
+    return s;
+  }
+  function montarAluno() {
+    var d = est.inicio;
+    atualizadoEl.textContent = d.atualizado ? 'Atualizado em ' + d.atualizado : '';
+    app.innerHTML = '';
+    app.appendChild(P.cabecalhoAluno(d.dados));
+    var opcoes = [['painel', 'Meu painel', 'Acertos, níveis e onde focar']];
+    if (d.fases && d.fases.lancamentos) opcoes.push(['simulados', 'Simulados', 'Lance e confira seus simulados']);
+    if (d.fases && d.fases.caderno) opcoes.push(['caderno', 'Caderno de erros', 'Registre onde você errou']);
+    if (!opcoes.some(function (o) { return o[0] === est.abaAluno; })) est.abaAluno = 'painel';
+    var area = el('div', { class: 'aluno-area' });
+    if (opcoes.length > 1) {
+      var nav = el('nav', { class: 'caixas', 'aria-label': 'Seções do app', style: 'grid-template-columns:repeat(' + opcoes.length + ',minmax(0,1fr))' });
+      opcoes.forEach(function (o) {
+        var b = el('button', { class: 'caixa', type: 'button', 'aria-pressed': String(est.abaAluno === o[0]) }, [icone(o[0]), el('b', { text: o[1] }), el('span', { text: o[2] })]);
+        b.onclick = function () { est.abaAluno = o[0]; gravar('mentoria_aba_aluno', o[0]); montarAluno(); };
+        nav.appendChild(b);
+      });
+      app.appendChild(nav);
+    }
+    app.appendChild(area);
+    var ctx = { api: api, id: null, mentor: false, aviso: aviso, aoMudar: function () { atualizarAluno(null); } };
+    if (est.abaAluno === 'simulados') R.simulados(area, ctx);
+    else if (est.abaAluno === 'caderno') R.caderno(area, ctx);
+    else P.montar(d.dados, { raiz: area, semCabecalho: true });
+  }
+
+  // Depois de lançar ou corrigir: sincroniza só aquele aluno em segundo plano e atualiza o painel
+  var atualizando = {};
+  function atualizarAluno(id) {
+    var k = id || 'eu';
+    if (atualizando[k]) { atualizando[k] = 2; return; }
+    atualizando[k] = 1;
+    api('atualizar', id ? { id: id } : {}).then(function (r) {
+      var outraVez = atualizando[k] === 2; atualizando[k] = 0;
+      if (r && r.ok && r.dados) {
+        if (r.atualizado) atualizadoEl.textContent = 'Atualizado em ' + r.atualizado;
+        if (!id && est.inicio && est.inicio.papel === 'aluno') {
+          est.inicio.dados = r.dados;
+          if (est.abaAluno === 'painel') montarAluno();
+          aviso('Seu painel foi atualizado.');
+        } else if (id && est.cache[id]) {
+          est.cache[id].simulados = r.dados.simulados; est.cache[id].erros = r.dados.erros;
+          (est.inicio.alunos || []).forEach(function (y) { if (y.id === id) y.nSims = r.dados.simulados.length; });
+          aviso('Painel do aluno atualizado.');
+        }
+      }
+      if (outraVez) atualizarAluno(id);
+    }).catch(function () { atualizando[k] = 0; });
   }
 
   // ---------- Mentor e gestor: lista de alunos ----------
@@ -324,7 +386,10 @@
     area.appendChild(cab);
 
     var temDiag = x.diagnostico !== undefined && x.diagnostico !== null;
+    var fases = d.fases || {};
     var abas = [['painel', 'Painel']];
+    if (!x.semPlanilha && fases.lancamentos) abas.push(['simulados', 'Simulados']);
+    if (!x.semPlanilha && fases.caderno) abas.push(['caderno', 'Caderno de erros']);
     if (temDiag) abas.push(['diagnostico', 'Diagnóstico']);
     if (!abas.some(function (a) { return a[0] === est.aba; })) est.aba = x.semPlanilha && temDiag ? 'diagnostico' : 'painel';
     var barraAbas = el('div', { class: 'abas', role: 'tablist' });
@@ -336,7 +401,10 @@
     });
     if (abas.length > 1) area.appendChild(barraAbas);
     area.appendChild(conteudo);
+    var ctx = { api: api, id: x.id, mentor: true, aviso: aviso, aoMudar: function () { atualizarAluno(x.id); } };
     if (est.aba === 'diagnostico' && temDiag) desenharDiagnostico(conteudo, x.diagnostico, x);
+    else if (est.aba === 'simulados' && !x.semPlanilha) R.simulados(conteudo, ctx);
+    else if (est.aba === 'caderno' && !x.semPlanilha) R.caderno(conteudo, ctx);
     else if (x.semPlanilha) conteudo.appendChild(el('div', { class: 'aviso', text: 'Este aluno respondeu o diagnóstico, mas as planilhas dele ainda não foram criadas. Elas são criadas automaticamente; se demorar, use Mentoria → "Criar planilhas dos alunos pendentes".' }));
     else P.montar(x, { mentor: true, raiz: conteudo, semCabecalho: true });
   }

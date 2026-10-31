@@ -191,9 +191,8 @@ window.Painel = (function () {
     var r = calcular(d);
     if (!M) {
       document.getElementById('atualizado').textContent = d.atualizado ? 'Atualizado em ' + d.atualizado : '';
-      app.innerHTML = '';
-      raiz.appendChild(el('div', {}, [el('h1', { text: 'Olá, ' + d.primeiro + '!' }), el('p', { class: 'sub' }, [
-        el('span', { text: d.curso ? 'Rumo a ' + d.curso : '' }), el('span', { text: d.mentor ? 'Mentor: ' + d.mentor : '' }), el('span', { text: d.desde ? 'Na mentoria desde ' + d.desde : '' })])]));
+      if (raiz === app) app.innerHTML = '';
+      if (!opts.semCabecalho) raiz.appendChild(cabecalhoAluno(d));
     } else if (!opts.semCabecalho) {
       var atalhos = el('div', { class: 'atalhos' });
       if (d.urlMentor) atalhos.appendChild(el('a', { class: 'atalho', href: d.urlMentor, target: '_blank', rel: 'noopener', text: 'Planilha do mentor ↗' }));
@@ -265,5 +264,10 @@ window.Painel = (function () {
   }
 
 
-  return { montar: montar, el: el, sv: sv, norm: norm, pct: pct, ok: ok };
+  function cabecalhoAluno(d) {
+    return el('div', {}, [el('h1', { text: 'Olá, ' + d.primeiro + '!' }), el('p', { class: 'sub' }, [
+      el('span', { text: d.curso ? 'Rumo a ' + d.curso : '' }), el('span', { text: d.mentor ? 'Mentor: ' + d.mentor : '' }), el('span', { text: d.desde ? 'Na mentoria desde ' + d.desde : '' })])]);
+  }
+
+  return { montar: montar, cabecalhoAluno: cabecalhoAluno, el: el, sv: sv, norm: norm, pct: pct, ok: ok };
 })();
