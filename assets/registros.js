@@ -8,7 +8,7 @@ window.Registros = (function () {
   };
   var COMP = ['C1 · Norma culta', 'C2 · Tema e repertório', 'C3 · Argumentação', 'C4 · Coesão', 'C5 · Proposta de intervenção'];
   var MSG = {
-    faseDesligada: 'Esta parte do app ainda não está liberada.', proibido: 'Você não tem acesso a este aluno.',
+    faseDesligada: 'Esta parte do app ainda não está liberada.', proibido: 'Você não tem acesso a este aluno.', soMentor: 'Só o mentor cadastrado deste aluno pode editar a rotina.',
     ocupado: 'O sistema está ocupado salvando outra coisa. Tente de novo em alguns segundos.', naoEncontrado: 'Não encontrei esse registro. Recarregue a página.'
   };
   function msgErro(r) { return (r && (r.msg || MSG[r.erro])) || 'Não foi possível salvar agora. Tente de novo.'; }
@@ -386,7 +386,8 @@ window.Registros = (function () {
   }
 
   // ===================== Rotina =====================
-  // Grade de 7 colunas fixas (segunda a domingo) e linhas livres. O aluno só vê; mentor e gestor editam texto, linhas e cores.
+  // Grade de 7 colunas fixas (segunda a domingo) e linhas livres. Só o mentor cadastrado do aluno edita (o servidor confere);
+  // aluno e gestor só veem.
   var PALETA = [['', 'Sem cor'], ['#ff0000', 'Vermelho'], ['#ff9900', 'Laranja'], ['#ffff00', 'Amarelo'], ['#00ff00', 'Verde'],
     ['#4a86e8', 'Azul'], ['#9900ff', 'Roxo'], ['#ff00ff', 'Rosa'], ['#0b2545', 'Azul-marinho'],
     ['#f4cccc', 'Vermelho claro'], ['#fce5cd', 'Laranja claro'], ['#fff2cc', 'Amarelo claro'], ['#d9ead3', 'Verde claro'],
@@ -423,8 +424,9 @@ window.Registros = (function () {
       var vazia = !r.linhas.some(temTexto);
       var topo = el('div', { class: 'reg-topo' }, [el('div', {}, [
         el('h2', { class: 'reg-titulo', text: c.mentor ? 'Rotina do aluno' : 'Minha rotina' }),
-        el('p', { class: 'nota', style: 'margin:2px 0 0', text: c.mentor ? 'O aluno vê esta rotina no app e na planilha dele. Só o mentor e a coordenação editam.'
-          : 'Organizada pelo seu mentor. Para mudar algum bloco, converse com ele.' })])]);
+        el('p', { class: 'nota', style: 'margin:2px 0 0', text: !c.mentor ? 'Organizada pelo seu mentor. Para mudar algum bloco, converse com ele.'
+          : r.podeEditar ? 'O aluno vê esta rotina no app e na planilha dele. Só você, como mentor dele, pode editar.'
+          : 'Só o mentor cadastrado deste aluno edita a rotina. Aqui você só visualiza.' })])]);
       if (r.podeEditar) {
         var bt = el('button', { class: 'botao peq', type: 'button', text: vazia ? 'Montar rotina' : 'Editar rotina' });
         bt.onclick = function () { editar(r); };
@@ -433,7 +435,7 @@ window.Registros = (function () {
       raiz.appendChild(topo);
       if (r.antiga && r.podeEditar) raiz.appendChild(el('div', { class: 'aviso', text: 'Esta rotina ainda está no formato antigo da planilha (segunda a sexta, 6 blocos, com o horário em cada bloco). Ao salvar pela primeira vez, ela passa para o formato novo, com sábado, domingo, linhas livres e cores.' }));
       if (vazia) {
-        raiz.appendChild(el('div', { class: 'card vazio-card' }, [el('p', { class: 'vazio', text: c.mentor ? 'A rotina deste aluno ainda está vazia. Clique em "Montar rotina" para começar.' : 'Seu mentor ainda não montou a sua rotina. Ela aparece aqui assim que ele salvar.' })]));
+        raiz.appendChild(el('div', { class: 'card vazio-card' }, [el('p', { class: 'vazio', text: c.mentor ? (r.podeEditar ? 'A rotina deste aluno ainda está vazia. Clique em "Montar rotina" para começar.' : 'A rotina deste aluno ainda está vazia. Quem monta é o mentor cadastrado dele.') : 'Seu mentor ainda não montou a sua rotina. Ela aparece aqui assim que ele salvar.' })]));
         return;
       }
       var h = diaDeHoje();

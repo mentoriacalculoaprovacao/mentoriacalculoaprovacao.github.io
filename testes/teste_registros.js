@@ -31,7 +31,7 @@ function novoServidor(){
       case 'editarErro': { const e=st.erros.find(x=>x.linha===req.linha); if(e.parte!==req.antes.parte) return {ok:false,erro:'mudou',msg:'mudou'}; Object.assign(e,req.depois); return {ok:true}; }
       case 'excluirErro': st.erros=st.erros.filter(x=>x.linha!==req.linha); return {ok:true};
       case 'atualizar': return {ok:true,dados:dados(),atualizado:'31/10/2026 01:30'};
-      case 'rotina': return {ok:true,dias:['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'],linhas:st.rot.linhas,cores:st.rot.cores,antiga:false,versao:st.rot.versao,podeEditar:papel==='mentor',maxLinhas:30,padrao:8,maxTexto:300};
+      case 'rotina': return {ok:true,dias:['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'],linhas:st.rot.linhas,cores:st.rot.cores,antiga:false,versao:st.rot.versao,podeEditar:papel==='mentor'&&!st.soVer,maxLinhas:30,padrao:8,maxTexto:300};
       case 'salvarRotina':{
         if(papel!=='mentor') return {ok:false,erro:'proibido'};
         if(req.versao!==st.rot.versao) return {ok:false,erro:'mudou',msg:'A rotina foi alterada (na planilha ou por outra pessoa) enquanto você editava. Recarregue para ver a versão atual.'};
@@ -156,6 +156,7 @@ function novoServidor(){
   // ---------- Rotina (mentor edita) ----------
   await p.click('.aba:has-text("Rotina")');await p.waitForTimeout(400);
   ok((await p.textContent('.reg-titulo'))==='Rotina do aluno','mentor abre a rotina');
+  ok((await p.textContent('.reg-topo .nota')).includes('Só você, como mentor dele'),'mentor cadastrado vê que pode editar');
   await p.click('text=Editar rotina');await p.waitForTimeout(200);
   ok((await p.$$('table.rotina.editando textarea')).length===14,'editor com 2 linhas × 7 dias');
   await p.click('.ferramentas button[aria-label="Acrescentar uma linha no fim"]');await p.waitForTimeout(100);
@@ -188,5 +189,8 @@ function novoServidor(){
   p.once('dialog',d=>d.accept());
   await p.click('.aba:has-text("Painel")');await p.waitForTimeout(300);
   ok(!!(await p.$('.grade4')),'confirmando, sai do editor');
+  // gestor (ou mentor de outro aluno): só visualiza
+  srv.st.soVer=true;await p.click('.aba:has-text("Rotina")');await p.waitForTimeout(400);
+  ok(!(await p.$('text=Editar rotina'))&&(await p.textContent('.reg-topo .nota')).includes('só visualiza'),'quem não é o mentor cadastrado só visualiza');
   ok(erros.length===0,'mentor: sem erros de JavaScript '+erros.join(';'));await p.close();}
  await b.close();console.log(falhas?falhas+' falha(s)':'TUDO OK');process.exit(falhas?1:0);})();
