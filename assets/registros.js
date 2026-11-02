@@ -9,7 +9,8 @@ window.Registros = (function () {
   var COMP = ['C1 · Norma culta', 'C2 · Tema e repertório', 'C3 · Argumentação', 'C4 · Coesão', 'C5 · Proposta de intervenção'];
   var MSG = {
     faseDesligada: 'Esta parte do app ainda não está liberada.', proibido: 'Você não tem acesso a este aluno.', soMentor: 'Só o mentor cadastrado deste aluno pode editar a rotina.',
-    ocupado: 'O sistema está ocupado salvando outra coisa. Tente de novo em alguns segundos.', naoEncontrado: 'Não encontrei esse registro. Recarregue a página.'
+    ocupado: 'O sistema está ocupado salvando outra coisa. Tente de novo em alguns segundos.', naoEncontrado: 'Não encontrei esse registro. Recarregue a página.',
+    falha: 'O servidor não conseguiu concluir agora. Tente de novo em instantes.'
   };
   function msgErro(r) { return (r && (r.msg || MSG[r.erro])) || 'Não foi possível salvar agora. Tente de novo.'; }
   function hojeIso() { var d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); }
@@ -57,6 +58,11 @@ window.Registros = (function () {
         btNovo]));
       var lugarForm = el('div', {});
       raiz.appendChild(lugarForm);
+      if (c.fases && c.fases.pdfs && !c.mentor) {
+        var lugarPdfs = el('div', {});
+        raiz.appendChild(lugarPdfs);
+        listaPdfs(lugarPdfs, c, porChave, function (titulo) { abrirForm({ prova: titulo }); lugarForm.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+      }
 
       // Atalhos: provas com só um dos dias lançado
       var faltando = ordem.filter(function (k) { return !porChave[k].d1 || !porChave[k].d2; }).slice(0, 4);
@@ -224,6 +230,12 @@ window.Registros = (function () {
     }
   }
 
+  // Áreas: matéria do caderno → área do ENEM, e a numeração oficial do ENEM (Dia 1: 1–45 Linguagens, 46–90 Humanas;
+  // Dia 2: 91–135 Natureza, 136–180 Matemática)
+  var AREA_MAT = { 'Linguagens': 'L', 'História': 'H', 'Geografia': 'H', 'Sociologia': 'H', 'Filosofia': 'H', 'Física': 'N', 'Química': 'N', 'Biologia': 'N', 'Matemática': 'M' };
+  var NOME_AREA = { L: 'Linguagens', H: 'Humanas', N: 'Natureza', M: 'Matemática' };
+  function areaDaQuestao(q) { q = Number(q); return !(q >= 1 && q <= 180) ? null : q <= 45 ? 'L' : q <= 90 ? 'H' : q <= 135 ? 'N' : 'M'; }
+
   // ===================== Caderno de erros =====================
   function caderno(raiz, c) {
     carregando(raiz, 'Carregando caderno de erros…');
@@ -252,15 +264,40 @@ window.Registros = (function () {
         raiz.appendChild(res);
       }
 
+      // Quantos erros faltam registrar em cada simulado (45 − acertos de cada área, contra o que já está no caderno)
+      var esperados = r.esperados || {};
+      function faltamDe(nomeSim, extras) {
+        var esp = esperados[norm(nomeSim)];
+        if (!esp) return null;
+        var reg = { L: 0, H: 0, N: 0, M: 0 };
+        r.erros.concat(extras || []).forEach(function (e) { if (norm(e.simulado) === norm(nomeSim) && AREA_MAT[e.materia]) reg[AREA_MAT[e.materia]]++; });
+        return ['N', 'M', 'H', 'L'].filter(function (a) { return esp[a] !== null && esp[a] !== undefined; })
+          .map(function (a) { return { area: a, nome: NOME_AREA[a], esperado: esp[a], registrado: reg[a], falta: Math.max(0, esp[a] - reg[a]) }; });
+      }
+      var totalFalta = 0, simsFalta = 0;
+      r.simulados.forEach(function (sn) { var f = faltamDe(sn); if (!f) return; var t = f.reduce(function (s2, x) { return s2 + x.falta; }, 0); if (t) { totalFalta += t; simsFalta++; } });
+      if (totalFalta && !c.mentor) raiz.appendChild(el('div', { class: 'aviso faltam' }, [el('b', { text: 'Faltam ' + totalFalta + ' erros para registrar' }),
+        ' em ' + simsFalta + (simsFalta === 1 ? ' simulado' : ' simulados') + ' (pelos acertos que você lançou). Cada erro registrado entra na sua revisão.']));
+      else if (totalFalta && c.mentor) raiz.appendChild(el('div', { class: 'aviso faltam' }, [el('b', { text: 'Faltam ' + totalFalta + ' erros para registrar' }), ' em ' + simsFalta + (simsFalta === 1 ? ' simulado' : ' simulados') + ', pelos acertos lançados pelo aluno.']));
+
       // ---------- Registrar (modo rápido) ----------
       var erro = el('p', { class: 'erro', role: 'alert', text: '' });
+      var dicaFalta = el('p', { class: 'dica', style: 'margin:0', text: '' });
+      var avisoNum = el('p', { class: 'dica alerta', style: 'margin:0', text: '' });
       var selSim = el('select', { 'aria-label': 'Simulado' });
       selSim.appendChild(el('option', { value: '', text: 'Escolha o simulado…' }));
       r.simulados.forEach(function (s) { selSim.appendChild(el('option', { value: s, text: s })); });
       selSim.appendChild(el('option', { value: '__outro', text: 'Outro (digitar o nome)…' }));
       var outroSim = el('input', { type: 'text', placeholder: 'Nome do simulado ou da lista de questões', maxlength: '80', 'aria-label': 'Nome do simulado' });
       outroSim.style.display = 'none';
-      selSim.onchange = function () { outroSim.style.display = selSim.value === '__outro' ? '' : 'none'; if (selSim.value === '__outro') outroSim.focus(); };
+      function mostrarFalta() {
+        var f = selSim.value && selSim.value !== '__outro' ? faltamDe(selSim.value, pendentes) : null;
+        if (!f || !f.length) { dicaFalta.textContent = ''; return; }
+        var falta = f.filter(function (x) { return x.falta; });
+        dicaFalta.textContent = falta.length ? 'Neste simulado faltam registrar: ' + falta.map(function (x) { return x.nome + ' ' + x.falta; }).join(' · ') + '.'
+          : '✓ Todos os erros deste simulado já estão no caderno.';
+      }
+      selSim.onchange = function () { outroSim.style.display = selSim.value === '__outro' ? '' : 'none'; if (selSim.value === '__outro') outroSim.focus(); mostrarFalta(); };
       if (r.simulados.length) selSim.value = r.simulados[0];
 
       var selMat = el('select', { 'aria-label': 'Matéria' });
@@ -292,6 +329,7 @@ window.Registros = (function () {
         });
         btSalvar.disabled = !pendentes.length;
         btSalvar.textContent = pendentes.length ? 'Salvar ' + pendentes.length + (pendentes.length === 1 ? ' erro' : ' erros') : 'Salvar';
+        mostrarFalta();
       }
       function adicionar() {
         erro.textContent = '';
@@ -304,6 +342,9 @@ window.Registros = (function () {
         if (pendentes.concat(r.erros).some(function (x) { return norm(x.simulado) === norm(e.simulado) && String(x.questao) === e.questao; })) {
           erro.textContent = 'A questão ' + e.questao + ' deste simulado já está no caderno.'; questao.focus(); return false;
         }
+        var areaQ = areaDaQuestao(e.questao);
+        avisoNum.textContent = areaQ && AREA_MAT[e.materia] && areaQ !== AREA_MAT[e.materia]
+          ? 'Atenção: no ENEM, a questão ' + e.questao + ' é de ' + NOME_AREA[areaQ] + ' e você marcou ' + e.materia + '. Se o simulado segue a numeração do ENEM, confira; se não, pode ignorar.' : '';
         pendentes.push(e);
         (partesDe[e.materia] = partesDe[e.materia] || []).indexOf(e.parte) < 0 && partesDe[e.materia].push(e.parte);
         parte.value = ''; questao.value = ''; selMot.value = ''; outroMot.value = ''; outroMot.style.display = 'none';
@@ -325,11 +366,11 @@ window.Registros = (function () {
 
       raiz.appendChild(el('div', { class: 'card form-reg' }, [
         el('h3', { text: 'Registrar erros' }),
-        el('label', { class: 'campo' }, [el('span', { text: '1. Em qual simulado?' }), selSim, outroSim]),
+        el('label', { class: 'campo' }, [el('span', { text: '1. Em qual simulado?' }), selSim, outroSim, dicaFalta]),
         el('div', { class: 'campo' }, [el('span', { text: '2. Cada questão que errou' }),
           el('div', { class: 'linha-erro' }, [selMat, parte, dl, el('div', { class: 'motivo-campo' }, [selMot, outroMot]), questao, btAdd])]),
         el('p', { class: 'nota', style: 'margin:0', text: 'Dica: aperte Enter no número da questão para adicionar e já começar o próximo. O simulado e a matéria continuam escolhidos.' }),
-        listaPend, erro,
+        avisoNum, listaPend, erro,
         el('div', { class: 'acoes-form' }, [btSalvar])
       ]));
 
@@ -339,6 +380,10 @@ window.Registros = (function () {
       if (!ordem.length) raiz.appendChild(el('div', { class: 'card vazio-card' }, [el('p', { class: 'vazio', text: c.mentor ? 'Nenhum erro registrado ainda.' : 'Nenhum erro registrado ainda. Comece pelo último simulado que você fez.' })]));
       ordem.forEach(function (k) {
         var card = el('div', { class: 'card' }, [el('div', { class: 'sim-cab' }, [el('b', { text: k }), el('span', { class: 'nota', style: 'margin:0', text: grupos[k].length + (grupos[k].length === 1 ? ' erro' : ' erros') })])]);
+        var f = faltamDe(k);
+        if (f && f.length) card.appendChild(el('div', { class: 'progresso-areas' }, f.map(function (x) {
+          return el('span', { class: 'tag' + (x.falta ? '' : ' completo'), text: x.nome + ' ' + Math.min(x.registrado, x.esperado) + ' de ' + x.esperado });
+        })));
         grupos[k].sort(function (a, b) { return (Number(a.questao) || 9999) - (Number(b.questao) || 9999); }).forEach(function (e) { card.appendChild(itemErro(e)); });
         raiz.appendChild(card);
       });
@@ -604,5 +649,268 @@ window.Registros = (function () {
     }
   }
 
-  return { simulados: simulados, caderno: caderno, rotina: rotina, podeSair: podeSair };
+  // ===================== Revisão espaçada do caderno =====================
+  // Cada tema do caderno ("Matéria – Tema") volta para revisão 7 dias depois do erro. Revisou e foi bem: o próximo
+  // intervalo é 1,4 vez o anterior (7 → 10 → 14 → 19 → 27 → 30 dias, teto de 30); foi bem na de 30 dias: consolidado.
+  // Ainda com dificuldade, ou erro novo no tema: volta para 7 dias. Prioridade do dia = erros do tema × atraso relativo.
+  var REV = { primeiro: 7, fator: 1.4, maximo: 30 };
+  var ETAPAS = (function () { var l = [REV.primeiro], x = REV.primeiro; while (x < REV.maximo) { x = Math.min(x * REV.fator, REV.maximo); l.push(Math.round(x)); } return l; })();
+  var SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+  function diaN(iso) { var p = String(iso).split('-'); return Math.round(Date.UTC(+p[0], +p[1] - 1, +p[2]) / 864e5); }
+  function isoDe(n) { return new Date(n * 864e5).toISOString().slice(0, 10); }
+  function dataCurta(iso) { var d = new Date(diaN(iso) * 864e5); return SEMANA[d.getUTCDay()] + ' ' + iso.slice(8, 10) + '/' + iso.slice(5, 7); }
+  function maisUsada(c) { return Object.keys(c).sort(function (a, b) { return c[b] - c[a] || a.localeCompare(b); })[0]; }
+
+  function agenda(erros, revisoes, hoje) {
+    var g = {}, H = diaN(hoje);
+    erros.forEach(function (e) {
+      var k = norm(e.materia) + '|' + norm(e.tema);
+      var x = g[k] = g[k] || { chave: k, materia: e.materia, grafias: {}, eventos: [], erros: [] };
+      x.grafias[e.tema] = (x.grafias[e.tema] || 0) + 1; x.erros.push(e); x.eventos.push({ d: diaN(e.data), tipo: 'erro' });
+    });
+    revisoes.forEach(function (r) { var x = g[norm(r.materia) + '|' + norm(r.tema)]; if (x) x.eventos.push({ d: diaN(r.data), tipo: r.resultado }); });
+    return Object.keys(g).map(function (k) {
+      var x = g[k], intervalo = null, prox = null, etapa = 0, consolidado = false, nRev = 0;
+      x.eventos.sort(function (a, b) { return a.d - b.d || (a.tipo === 'erro' ? -1 : b.tipo === 'erro' ? 1 : 0); }).forEach(function (ev) {
+        if (ev.tipo === 'erro') { intervalo = REV.primeiro; etapa = 0; prox = ev.d + REV.primeiro; consolidado = false; return; }
+        if (intervalo === null) return;
+        nRev++;
+        if (ev.tipo === 'dificil') { intervalo = REV.primeiro; etapa = 0; prox = ev.d + REV.primeiro; consolidado = false; return; }
+        if (consolidado) return;
+        if (intervalo >= REV.maximo) { consolidado = true; prox = null; etapa = ETAPAS.length; return; }
+        intervalo = Math.min(intervalo * REV.fator, REV.maximo); etapa++; prox = ev.d + Math.round(intervalo);
+      });
+      var tema = maisUsada(x.grafias), atraso = prox === null ? 0 : H - prox;
+      var questoes = x.erros.filter(function (e) { return e.questao; }).slice(-6).map(function (e) { return { q: e.questao, sim: e.simulado }; });
+      return {
+        chave: k, materia: x.materia, tema: tema, rotulo: x.materia + ' – ' + tema, nErros: x.erros.length, nRev: nRev, etapa: etapa,
+        intervalo: intervalo === null ? null : Math.round(intervalo), proxima: prox === null ? null : isoDe(prox), atraso: atraso,
+        situacao: consolidado ? 'consolidado' : prox !== null && prox <= H ? 'hoje' : 'agendado', questoes: questoes,
+        prioridade: x.erros.length * (1 + Math.max(0, atraso) / Math.max(1, Math.round(intervalo || REV.primeiro)))
+      };
+    });
+  }
+
+  function textoQuestoes(qs) {
+    if (!qs.length) return '';
+    var por = {}, ordem = [];
+    qs.forEach(function (x) { if (!por[x.sim]) { por[x.sim] = []; ordem.push(x.sim); } por[x.sim].push(x.q); });
+    return ordem.map(function (s) { return (por[s].length === 1 ? 'a questão ' : 'as questões ') + por[s].join(', ') + ' do ' + s; }).join(' e ');
+  }
+
+  // Cartão do painel: o que revisar hoje (aluno marca; mentor e gestor só veem)
+  function revisao(lugar, c) {
+    lugar.innerHTML = '';
+    var card = el('div', { class: 'card rev-card' }, [el('p', { class: 'carregando', style: 'margin:0', text: 'Montando sua revisão…' })]);
+    lugar.appendChild(card);
+    c.api('revisoes', { id: c.id }).then(function (r) {
+      if (!r || !r.ok) { if (r && r.erro === 'faseDesligada') lugar.innerHTML = ''; else card.innerHTML = ''; return; }
+      desenhar(r);
+    }).catch(function () { lugar.innerHTML = ''; });
+
+    function desenhar(r) {
+      var itens = agenda(r.erros, r.revisoes, r.hoje);
+      var hoje = itens.filter(function (x) { return x.situacao === 'hoje'; }).sort(function (a, b) { return b.prioridade - a.prioridade; });
+      var H = diaN(r.hoje);
+      var proximos = itens.filter(function (x) { return x.situacao === 'agendado' && diaN(x.proxima) - H <= 7; }).sort(function (a, b) { return diaN(a.proxima) - diaN(b.proxima); });
+      var consol = itens.filter(function (x) { return x.situacao === 'consolidado'; }).length;
+      card.innerHTML = '';
+      card.appendChild(el('div', { class: 'rev-cab' }, [el('div', {}, [el('h3', { text: c.mentor ? 'Revisões do aluno' : 'Revisão de hoje' }),
+        el('p', { class: 'nota', style: 'margin:2px 0 0', text: 'Pela curva do esquecimento: cada tema do caderno volta 7 dias depois do erro e, a cada revisão boa, o intervalo cresce 1,4 vez (até 30 dias).' })]),
+        itens.length ? el('span', { class: 'rev-resumo', text: itens.length + (itens.length === 1 ? ' tema' : ' temas') + ' na agenda' + (consol ? ' · ' + consol + ' consolidado' + (consol === 1 ? '' : 's') : '') }) : null]));
+      if (!itens.length) { card.appendChild(el('p', { class: 'vazio', style: 'margin:6px 0 0', text: c.mentor ? 'O aluno ainda não registrou erros com tema no caderno.' : 'Registre os erros dos seus simulados no caderno: a agenda de revisão sai deles.' })); return; }
+      if (!hoje.length) {
+        var p0 = proximos[0] || itens.filter(function (x) { return x.situacao === 'agendado'; }).sort(function (a, b) { return diaN(a.proxima) - diaN(b.proxima); })[0];
+        card.appendChild(el('p', { class: 'rev-msg ok', text: (c.mentor ? 'Nenhuma revisão pendente hoje.' : 'Tudo em dia! Nada para revisar hoje.') + (p0 ? ' Próxima: ' + p0.rotulo + ' em ' + dataCurta(p0.proxima) + '.' : '') }));
+      } else {
+        var t = hoje[0];
+        var q = textoQuestoes(t.questoes);
+        card.appendChild(el('p', { class: 'rev-msg' }, [c.mentor ? 'Prioridade do aluno hoje: ' : 'Hoje, comece por ', el('b', { text: t.rotulo }),
+          ': ' + t.nErros + (t.nErros === 1 ? ' erro' : ' erros') + ' no caderno' + (t.atraso > 0 ? ' e ' + t.atraso + (t.atraso === 1 ? ' dia' : ' dias') + ' de atraso na revisão' : '') + '. ' +
+          (c.mentor ? '' : 'Revise a teoria' + (q ? ', refaça ' + q : '') + ' e resolva questões novas do mesmo tema.')]));
+        var lista = el('div', { class: 'rev-lista' });
+        hoje.slice(0, 5).forEach(function (x) { lista.appendChild(itemRev(x)); });
+        card.appendChild(lista);
+        if (hoje.length > 5) {
+          var mais = el('div', { class: 'rev-lista' }); hoje.slice(5).forEach(function (x) { mais.appendChild(itemRev(x)); });
+          card.appendChild(el('details', { class: 'rev-mais' }, [el('summary', { text: 'Mais ' + (hoje.length - 5) + (hoje.length - 5 === 1 ? ' tema' : ' temas') + ' para revisar' }), mais]));
+        }
+      }
+      if (proximos.length) card.appendChild(el('div', { class: 'rev-prox' }, [el('span', { class: 'nota', style: 'margin:0', text: 'Próximos 7 dias:' })].concat(
+        proximos.slice(0, 8).map(function (x) { return el('span', { class: 'tag', text: dataCurta(x.proxima) + ' · ' + x.rotulo }); }))));
+
+      function itemRev(x) {
+        var info = x.nErros + (x.nErros === 1 ? ' erro' : ' erros') + ' · revisão ' + Math.min(x.etapa + 1, ETAPAS.length) + ' de ' + ETAPAS.length + ' · ' +
+          (x.atraso > 0 ? 'atrasada ' + x.atraso + (x.atraso === 1 ? ' dia' : ' dias') : 'vence hoje');
+        var box = el('div', { class: 'rev-item' }, [el('div', { class: 'rev-item-txt' }, [el('b', { text: x.rotulo }), el('small', { text: info }),
+          x.questoes.length ? el('small', { text: 'Refazer: ' + textoQuestoes(x.questoes) }) : null])]);
+        if (!c.mentor) {
+          var bem = el('button', { class: 'mini forte', type: 'button', text: 'Revisei: fui bem' });
+          var dif = el('button', { class: 'mini', type: 'button', text: 'Ainda tenho dificuldade' });
+          var marcar = function (res) {
+            bem.disabled = dif.disabled = true;
+            c.api('registrarRevisao', { id: c.id, materia: x.materia, tema: x.tema, resultado: res }).then(function (y) {
+              if (!y || !y.ok) { bem.disabled = dif.disabled = false; c.aviso(msgErro(y), true); return; }
+              r.revisoes.push({ materia: x.materia, tema: x.tema, resultado: res, data: y.data || r.hoje });
+              var depois = agenda(r.erros, r.revisoes, r.hoje).filter(function (z) { return z.chave === x.chave; })[0];
+              c.aviso(depois && depois.situacao === 'consolidado' ? 'Tema consolidado! ' + x.rotulo + ' sai da agenda.'
+                : res === 'bem' ? 'Boa! Próxima revisão de ' + x.rotulo + ' em ' + depois.intervalo + ' dias (' + dataCurta(depois.proxima) + ').'
+                : 'Sem problema: ' + x.rotulo + ' volta em 7 dias (' + dataCurta(depois.proxima) + '). Vale falar disso com seu mentor.');
+              desenhar(r);
+            }).catch(function () { bem.disabled = dif.disabled = false; c.aviso('Sem conexão. Tente de novo.', true); });
+          };
+          bem.onclick = function () { marcar('bem'); };
+          dif.onclick = function () { marcar('dificil'); };
+          box.appendChild(el('div', { class: 'acoes' }, [bem, dif]));
+        }
+        return box;
+      }
+    }
+  }
+
+  // ===================== Simulados em PDF =====================
+  function tamanhoTxt(b) { return b >= 1048576 ? (b / 1048576).toFixed(1).replace('.', ',') + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; }
+  function brData(iso) { return iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4) : ''; }
+  function baixar(c, p, bt) {
+    var antes = bt.textContent; bt.disabled = true; bt.textContent = 'Baixando…';
+    c.api('baixarPdf', { idPdf: p.id }).then(function (x) {
+      bt.disabled = false; bt.textContent = antes;
+      if (!x || !x.ok) { c.aviso(msgErro(x), true); return; }
+      var bin = atob(x.base64), bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      var url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+      var a = el('a', { href: url, download: x.nome || (p.titulo + '.pdf') });
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+    }).catch(function (e) { bt.disabled = false; bt.textContent = antes; if (e.message !== 'sessao') c.aviso('Não foi possível baixar agora. Tente de novo.', true); });
+  }
+
+  // Aluno: lista no topo da caixa Simulados, com atalho para lançar o resultado com o nome certo da prova
+  function listaPdfs(lugar, c, porChave, aoLancar) {
+    c.api('pdfs', {}).then(function (r) {
+      if (!r || !r.ok || !r.pdfs.length) return;
+      var H = diaN(r.hoje);
+      var card = el('div', { class: 'card pdf-card' }, [el('div', { class: 'sim-cab' }, [el('b', { text: 'Simulados para baixar' }), el('span', { class: 'nota', style: 'margin:0', text: 'Faça a prova e depois lance o resultado aqui mesmo.' })])]);
+      var lista = el('div', { class: 'pdf-lista' });
+      r.pdfs.forEach(function (p, i) {
+        var g = porChave[norm(p.titulo)];
+        var feito = g ? (g.d1 && g.d2 ? '✓ Dia 1 e Dia 2 lançados' : g.d1 ? 'Falta lançar o Dia 2' : 'Falta lançar o Dia 1') : '';
+        var novo = H - diaN(p.liberarEm) <= 7;
+        var bt = el('button', { class: 'mini forte', type: 'button', text: 'Baixar PDF' });
+        bt.onclick = function () { baixar(c, p, bt); };
+        var lan = el('button', { class: 'mini', type: 'button', text: 'Lançar resultado' });
+        lan.onclick = function () { aoLancar(p.titulo); };
+        var item = el('div', { class: 'pdf-item' }, [el('div', { class: 'pdf-txt' }, [
+          el('b', {}, [p.titulo, novo ? el('span', { class: 'selo-novo', text: 'novo' }) : null]),
+          p.descricao ? el('small', { text: p.descricao }) : null,
+          el('small', { text: 'Liberado em ' + brData(p.liberarEm) + ' · ' + tamanhoTxt(p.tamanho) + (feito ? ' · ' + feito : '') })]),
+          el('div', { class: 'acoes' }, [bt, lan])]);
+        if (i >= 3) item.classList.add('oculto');
+        lista.appendChild(item);
+      });
+      card.appendChild(lista);
+      if (r.pdfs.length > 3) {
+        var ver = el('button', { class: 'link-voltar', type: 'button', text: 'Ver todos (' + r.pdfs.length + ')' });
+        ver.onclick = function () { Array.prototype.forEach.call(lista.querySelectorAll('.oculto'), function (x) { x.classList.remove('oculto'); }); ver.remove(); };
+        card.appendChild(ver);
+      }
+      lugar.appendChild(card);
+    }).catch(function () { });
+  }
+
+  // Gestão (e mentores, só para ver e baixar): enviar, agendar, editar e remover
+  function pdfsGestao(raiz, c) {
+    carregando(raiz, 'Carregando simulados em PDF…');
+    c.api('pdfs', {}).then(function (r) {
+      if (!r || !r.ok) { falha(raiz, r); return; }
+      desenhar(r);
+    }).catch(function (e) { if (e.message !== 'sessao') falha(raiz, null); });
+
+    function desenhar(r) {
+      raiz.innerHTML = '';
+      raiz.appendChild(el('div', { class: 'reg-topo' }, [el('div', {}, [el('h2', { class: 'reg-titulo', text: 'Simulados em PDF' }),
+        el('p', { class: 'nota', style: 'margin:2px 0 0', text: r.podeGerenciar ? 'Os alunos baixam na caixa Simulados a partir da data de liberação. O nome do simulado é o mesmo que eles usam ao lançar o resultado.' : 'Simulados liberados para os alunos.' })])]));
+      if (r.podeGerenciar) raiz.appendChild(formEnvio(r));
+      var lista = el('div', { class: 'reg-lista' });
+      if (!r.pdfs.length) lista.appendChild(el('div', { class: 'card vazio-card' }, [el('p', { class: 'vazio', text: 'Nenhum simulado em PDF publicado ainda.' })]));
+      r.pdfs.forEach(function (p) { lista.appendChild(itemGestao(p, r)); });
+      raiz.appendChild(lista);
+    }
+
+    function formEnvio(r) {
+      var arq = el('input', { type: 'file', accept: 'application/pdf,.pdf', 'aria-label': 'Arquivo PDF' });
+      var tit = el('input', { type: 'text', maxlength: '80', placeholder: 'Ex.: Simulado Cálculo Aprovação 3 — 2026', 'aria-label': 'Nome do simulado' });
+      var desc = el('input', { type: 'text', maxlength: '300', placeholder: 'Opcional: ex.: Dia 1 e Dia 2 no mesmo arquivo; gabarito na última página', 'aria-label': 'Descrição' });
+      var lib = el('input', { type: 'date', 'aria-label': 'Liberar em' }); lib.value = hojeIso();
+      var erro = el('p', { class: 'erro', role: 'alert', text: '' });
+      var env = el('button', { class: 'botao peq', type: 'button', text: 'Publicar simulado' });
+      arq.onchange = function () { var f = arq.files[0]; if (f && !tit.value.trim()) tit.value = f.name.replace(/\.pdf$/i, '').replace(/[_]+/g, ' '); };
+      env.onclick = function () {
+        erro.textContent = '';
+        var f = arq.files[0];
+        if (!f) { erro.textContent = 'Escolha o arquivo PDF.'; return; }
+        if (f.size > r.maxBytes) { erro.textContent = 'O PDF tem ' + tamanhoTxt(f.size) + ': o limite é ' + tamanhoTxt(r.maxBytes) + '. Reduza o arquivo e tente de novo.'; return; }
+        if (!tit.value.trim()) { erro.textContent = 'Dê um nome ao simulado.'; tit.focus(); return; }
+        env.disabled = true; env.textContent = 'Enviando… (pode levar até 1 minuto)';
+        var leitor = new FileReader();
+        leitor.onload = function () {
+          var b64 = String(leitor.result).split(',')[1] || '';
+          c.api('enviarPdf', { titulo: tit.value, descricao: desc.value, liberarEm: lib.value, nome: f.name, base64: b64 }).then(function (x) {
+            env.disabled = false; env.textContent = 'Publicar simulado';
+            if (!x || !x.ok) { erro.textContent = msgErro(x); return; }
+            c.aviso('Simulado publicado.'); pdfsGestao(raiz, c);
+          }).catch(function (e) { env.disabled = false; env.textContent = 'Publicar simulado'; if (e.message !== 'sessao') erro.textContent = 'O envio falhou (arquivo grande ou conexão). Tente de novo.'; });
+        };
+        leitor.onerror = function () { env.disabled = false; env.textContent = 'Publicar simulado'; erro.textContent = 'Não consegui ler o arquivo.'; };
+        leitor.readAsDataURL(f);
+      };
+      return el('div', { class: 'card form-reg' }, [el('h3', { text: 'Publicar um simulado' }),
+        el('label', { class: 'campo' }, [el('span', { text: 'Arquivo PDF (até ' + tamanhoTxt(r.maxBytes) + ')' }), arq]),
+        el('label', { class: 'campo' }, [el('span', { text: 'Nome do simulado' }), tit, el('small', { class: 'dica', text: 'Use um nome único: é ele que junta os resultados de todos os alunos.' })]),
+        el('label', { class: 'campo' }, [el('span', { text: 'Descrição' }), desc]),
+        el('label', { class: 'campo curto' }, [el('span', { text: 'Liberar para os alunos em' }), lib]),
+        erro, el('div', { class: 'acoes-form' }, [env])]);
+    }
+
+    function itemGestao(p, r) {
+      var bt = el('button', { class: 'mini forte', type: 'button', text: 'Baixar' });
+      bt.onclick = function () { baixar(c, p, bt); };
+      var acoes = el('div', { class: 'acoes' }, [bt]);
+      var info = (p.liberado ? 'Liberado em ' : 'Agendado para ') + brData(p.liberarEm) + ' · ' + tamanhoTxt(p.tamanho) + (r.podeGerenciar ? ' · ' + (p.downloads || 0) + (p.downloads === 1 ? ' download' : ' downloads') : '');
+      var card = el('div', { class: 'card pdf-item' }, [el('div', { class: 'pdf-txt' }, [el('b', {}, [p.titulo, p.liberado ? null : el('span', { class: 'selo-agendado', text: 'agendado' })]),
+        p.descricao ? el('small', { text: p.descricao }) : null, el('small', { text: info })]), acoes]);
+      if (r.podeGerenciar) {
+        var ed = el('button', { class: 'mini', type: 'button', text: 'Editar' });
+        var rm = el('button', { class: 'mini', type: 'button', text: 'Remover' });
+        acoes.appendChild(ed); acoes.appendChild(rm);
+        rm.onclick = function () {
+          confirmarInline(acoes, 'Tirar do app? (o arquivo fica no Drive)', 'Remover', function () {
+            c.api('removerPdf', { idPdf: p.id }).then(function (x) { if (!x || !x.ok) c.aviso(msgErro(x), true); else c.aviso('Simulado removido do app.'); pdfsGestao(raiz, c); })
+              .catch(function () { c.aviso('Não foi possível remover agora.', true); pdfsGestao(raiz, c); });
+          });
+        };
+        ed.onclick = function () {
+          var t = el('input', { type: 'text', maxlength: '80', 'aria-label': 'Nome do simulado' }); t.value = p.titulo;
+          var d = el('input', { type: 'text', maxlength: '300', 'aria-label': 'Descrição' }); d.value = p.descricao;
+          var l = el('input', { type: 'date', 'aria-label': 'Liberar em' }); l.value = p.liberarEm;
+          var ok = el('button', { class: 'mini forte', type: 'button', text: 'Salvar' }), no = el('button', { class: 'mini', type: 'button', text: 'Cancelar' });
+          var msg = el('small', { class: 'erro', text: '' });
+          var form = el('div', { class: 'card form-reg' }, [el('label', { class: 'campo' }, [el('span', { text: 'Nome' }), t]), el('label', { class: 'campo' }, [el('span', { text: 'Descrição' }), d]),
+            el('label', { class: 'campo curto' }, [el('span', { text: 'Liberar em' }), l]), el('div', { class: 'acoes' }, [ok, no]), msg]);
+          card.replaceWith(form);
+          no.onclick = function () { form.replaceWith(card); };
+          ok.onclick = function () {
+            ok.disabled = true;
+            c.api('editarPdf', { idPdf: p.id, titulo: t.value, descricao: d.value, liberarEm: l.value }).then(function (x) {
+              if (!x || !x.ok) { ok.disabled = false; msg.textContent = msgErro(x); return; }
+              c.aviso('Simulado atualizado.'); pdfsGestao(raiz, c);
+            }).catch(function () { ok.disabled = false; msg.textContent = 'Sem conexão. Tente de novo.'; });
+          };
+        };
+      }
+      return card;
+    }
+  }
+
+  return { simulados: simulados, caderno: caderno, rotina: rotina, podeSair: podeSair, revisao: revisao, pdfsGestao: pdfsGestao, agenda: agenda, ETAPAS: ETAPAS };
 })();

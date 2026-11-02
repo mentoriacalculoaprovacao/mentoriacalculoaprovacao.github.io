@@ -185,6 +185,7 @@
       if (d.papel === 'aluno') { montarAluno(); avisoVincular(d.quem); return; }
       est.filtro = ler('mentoria_filtro') || 'todos';
       est.aba = ler('mentoria_aba') || 'painel';
+      est.secao = ler('mentoria_secao') || 'alunos';
       montarLista();
       avisoVincular(d.quem);
     }).catch(function (e) { if (e.message !== 'sessao') { app.innerHTML = ''; app.appendChild(el('p', { class: 'carregando', text: 'Não foi possível carregar agora. Recarregue a página em instantes.' })); } });
@@ -236,11 +237,14 @@
       app.appendChild(nav);
     }
     app.appendChild(area);
-    var ctx = { api: api, id: null, mentor: false, aviso: aviso, aoMudar: function () { atualizarAluno(null); } };
+    var ctx = { api: api, id: null, mentor: false, fases: d.fases || {}, aviso: aviso, aoMudar: function () { atualizarAluno(null); } };
     if (est.abaAluno === 'simulados') R.simulados(area, ctx);
     else if (est.abaAluno === 'caderno') R.caderno(area, ctx);
     else if (est.abaAluno === 'rotina') R.rotina(area, ctx);
-    else P.montar(d.dados, { raiz: area, semCabecalho: true });
+    else {
+      if (ctx.fases.revisao) { var rev = el('div', {}); area.appendChild(rev); R.revisao(rev, ctx); }
+      P.montar(d.dados, { raiz: area, semCabecalho: true });
+    }
   }
 
   // Depois de lançar ou corrigir: sincroniza só aquele aluno em segundo plano e atualiza o painel
@@ -277,6 +281,24 @@
     var sub = [el('span', { text: gestor ? 'Visão de gestor' : 'Painel dos seus mentorados' }), el('span', { text: d.alunos.length + (d.alunos.length === 1 ? ' aluno' : ' alunos') })];
     if (gestor && semMentor) sub.push(el('span', { text: semMentor + ' sem mentor' }));
     app.appendChild(el('div', {}, [el('h1', { text: 'Olá, ' + (primeiro && primeiro.indexOf('@') < 0 ? primeiro : '') + '!' }), el('p', { class: 'sub' }, sub)]));
+
+    // Seções do topo: Alunos · Simulados em PDF (quando a fase está ligada)
+    if (d.fases && d.fases.pdfs) {
+      if (est.secao !== 'pdfs') est.secao = 'alunos';
+      var secoes = el('div', { class: 'seg secoes', role: 'tablist', 'aria-label': 'Seções' });
+      [['alunos', gestor ? 'Alunos' : 'Mentorados'], ['pdfs', 'Simulados em PDF']].forEach(function (o) {
+        var b = el('button', { type: 'button', role: 'tab', 'aria-checked': String(est.secao === o[0]), 'aria-selected': String(est.secao === o[0]), text: o[1] });
+        b.onclick = function () { if (est.secao === o[0] || !R.podeSair()) return; est.secao = o[0]; gravar('mentoria_secao', o[0]); montarLista(); };
+        secoes.appendChild(b);
+      });
+      app.appendChild(secoes);
+      if (est.secao === 'pdfs') {
+        var areaPdf = el('div', { class: 'aluno-area' });
+        app.appendChild(areaPdf);
+        R.pdfsGestao(areaPdf, { api: api, mentor: true, aviso: aviso });
+        return;
+      }
+    }
 
     if (!d.alunos.length) {
       app.appendChild(el('div', { class: 'aviso', text: gestor ? 'Ainda não há alunos cadastrados.' : 'Você ainda não tem mentorados. Quando o gestor cadastrar você como mentor de um aluno, ele aparece aqui.' }));
@@ -406,13 +428,16 @@
     });
     if (abas.length > 1) area.appendChild(barraAbas);
     area.appendChild(conteudo);
-    var ctx = { api: api, id: x.id, mentor: true, aviso: aviso, aoMudar: function () { atualizarAluno(x.id); } };
+    var ctx = { api: api, id: x.id, mentor: true, fases: fases, aviso: aviso, aoMudar: function () { atualizarAluno(x.id); } };
     if (est.aba === 'diagnostico' && temDiag) desenharDiagnostico(conteudo, x.diagnostico, x);
     else if (est.aba === 'simulados' && !x.semPlanilha) R.simulados(conteudo, ctx);
     else if (est.aba === 'caderno' && !x.semPlanilha) R.caderno(conteudo, ctx);
     else if (est.aba === 'rotina' && !x.semPlanilha) R.rotina(conteudo, ctx);
     else if (x.semPlanilha) conteudo.appendChild(el('div', { class: 'aviso', text: 'Este aluno respondeu o diagnóstico, mas as planilhas dele ainda não foram criadas. Elas são criadas automaticamente; se demorar, use Mentoria → "Criar planilhas dos alunos pendentes".' }));
-    else P.montar(x, { mentor: true, raiz: conteudo, semCabecalho: true });
+    else {
+      if (fases.revisao) { var rev = el('div', {}); conteudo.appendChild(rev); R.revisao(rev, ctx); }
+      P.montar(x, { mentor: true, raiz: conteudo, semCabecalho: true });
+    }
   }
 
   // Gestor: escolher o mentor responsável

@@ -1,10 +1,13 @@
-// Testa as caixas do aluno (Meu painel · Simulados · Caderno de erros · Rotina) e as abas do mentor, com um servidor simulado que guarda estado.
+// Testa as caixas do aluno (Meu painel · Simulados · Caderno de erros · Rotina), a revisão espaçada, os simulados em PDF
+// e as abas do mentor, com um servidor simulado que guarda estado.
 // Rodar: node testes/teste_registros.js
 const {chromium}=require('playwright');
 const SITE='file://'+require('path').resolve(__dirname,'..','index.html');
 function novoServidor(){
   const st={lanc:[{id:'',origem:'formulario',prova:'SAS 1 2024',chave:'sas12024',dia:1,data:'01/10/2026',dataIso:'2026-10-01',L:30,H:28,N:null,M:null,C:[160,160,140,160,120],quando:1}],
-    erros:[{linha:3,simulado:'SAS 1 2024',materia:'Química',parte:'Estequiometria',motivo:'Erro de cálculo',questao:''}],seq:1,log:[],
+    erros:[{linha:3,simulado:'SAS 1 2024',materia:'Química',parte:'Estequiometria',motivo:'Erro de cálculo',questao:'',data:'2026-10-20'}],seq:1,log:[],revs:[],baixados:[],
+    pdfs:[{id:'P1',titulo:'Simulado Cálculo Aprovação 1',descricao:'Dia 1 e Dia 2',tamanho:2400000,liberarEm:'2026-10-30',liberado:true,downloads:0},
+      {id:'P2',titulo:'Simulado Cálculo Aprovação 2',descricao:'',tamanho:900000,liberarEm:'2099-01-01',liberado:false,downloads:0}],
     rot:{linhas:[['8h - 10h','8h - 10h\nSimulado dia 1','8h - 10h\nSimulado dia 1','8h - 10h\nSimulado dia 1','8h - 10h\nSimulado dia 1','8h - 12h','8h - 12h'],
       ['Treina 16h','Treina 16h','Treina 16h','Treina 16h','Treina 16h','Seja feliz','Seja feliz']],
       cores:[['','','','','','#00ff00','#4a86e8'],['#ff0000','#ff0000','#ff0000','#ff0000','#ff0000','#00ff00','#4a86e8']],versao:'v1'}};
@@ -15,8 +18,8 @@ function novoServidor(){
     switch(req.acao){
       case 'config': return {ok:true,aceitaCodigo:true,google:false};
       case 'entrar': return {ok:true,sessao:'S',quem:{nome:papel==='mentor'?'Mentor Exemplo':'Aluna Exemplo',via:'codigo',aluno:papel==='aluno',mentor:papel==='mentor'}};
-      case 'inicio': return papel==='aluno'?{ok:true,papel:'aluno',quem:{nome:'Aluna Exemplo',via:'codigo',aluno:true},fases:{lancamentos:true,caderno:true,diagnostico:true,rotina:true},atualizado:'31/10/2026',dados:dados()}
-        :{ok:true,papel:'mentor',quem:{nome:'Mentor Exemplo',via:'codigo',mentor:true},fases:{lancamentos:true,caderno:true,diagnostico:true,rotina:true},atualizado:'31/10/2026',alunos:[{id:'A1',aluno:'Aluna Exemplo',mentor:'Mentor Exemplo',nSims:1}],mentores:[],meuMentor:'Mentor Exemplo'};
+      case 'inicio': return papel==='aluno'?{ok:true,papel:'aluno',quem:{nome:'Aluna Exemplo',via:'codigo',aluno:true},fases:{lancamentos:true,caderno:true,diagnostico:true,rotina:true,revisao:true,pdfs:true},atualizado:'31/10/2026',dados:dados()}
+        :{ok:true,papel:'mentor',quem:{nome:'Mentor Exemplo',via:'codigo',mentor:true},fases:{lancamentos:true,caderno:true,diagnostico:true,rotina:true,revisao:true,pdfs:true},atualizado:'31/10/2026',alunos:[{id:'A1',aluno:'Aluna Exemplo',mentor:'Mentor Exemplo',nSims:1}],mentores:[],meuMentor:'Mentor Exemplo'};
       case 'aluno': return {ok:true,aluno:Object.assign({id:'A1',codigo:'AB12-CD34',diagnostico:{'Prontidão (0–100)':'60'}},dados())};
       case 'simulados': return {ok:true,catalogo:[{nome:'SAS 1 2024',chave:'sas12024',alunos:3,ultimo:1},{nome:'Bernoulli 2 2025',chave:'bernoulli22025',alunos:2,ultimo:0}],lancamentos:st.lanc.slice().sort((a,b)=>b.quando-a.quando)};
       case 'salvarSimulado':{
@@ -26,8 +29,15 @@ function novoServidor(){
         const l={id:req.idLanc||('L'+(++st.seq)),origem:'app',prova:req.prova,chave:k,dia:req.dia,data:req.data.split('-').reverse().join('/'),dataIso:req.data,L:req.L??null,H:req.H??null,N:req.N??null,M:req.M??null,C:(req.C||[]).map(x=>x===''?null:x),quando:++st.seq};
         st.lanc=st.lanc.filter(x=>x.id!==req.idLanc||!req.idLanc);st.lanc.push(l);return {ok:true,idLanc:l.id};}
       case 'excluirSimulado': st.lanc=st.lanc.filter(l=>l.id!==req.idLanc); return {ok:true};
-      case 'caderno': return {ok:true,erros:st.erros,simulados:['Bernoulli 2 2025','SAS 1 2024'],materias:['Física','Química','Biologia','Matemática','História','Geografia','Linguagens','Sociologia','Filosofia'],motivos:['Não sabia o conteúdo','Interpretação do enunciado','Falta de atenção','Erro de cálculo']};
-      case 'salvarErros': req.erros.forEach(e=>st.erros.push(Object.assign({linha:3+st.erros.length},e))); return {ok:true,n:req.erros.length};
+      case 'caderno': return {ok:true,esperados:{sas12024:{L:15,H:17,N:null,M:null},bernoulli22025:{L:10,H:12,N:18,M:20}},erros:st.erros,simulados:['Bernoulli 2 2025','SAS 1 2024'],materias:['Física','Química','Biologia','Matemática','História','Geografia','Linguagens','Sociologia','Filosofia'],motivos:['Não sabia o conteúdo','Interpretação do enunciado','Falta de atenção','Erro de cálculo']};
+      case 'salvarErros': req.erros.forEach(e=>st.erros.push(Object.assign({linha:3+st.erros.length,data:'2026-11-01'},e))); return {ok:true,n:req.erros.length};
+      case 'revisoes': return {ok:true,hoje:'2026-11-02',revisoes:st.revs,erros:st.erros.map(e=>({simulado:e.simulado,materia:e.materia,tema:e.parte,questao:e.questao,data:e.data||'2026-10-20'}))};
+      case 'registrarRevisao': st.revs.push({materia:req.materia,tema:req.tema,resultado:req.resultado,data:'2026-11-02'}); return {ok:true,data:'2026-11-02'};
+      case 'pdfs': return {ok:true,hoje:'2026-11-02',podeGerenciar:papel==='gestor',maxBytes:15*1048576,pdfs:st.pdfs.filter(p=>papel==='gestor'||p.liberado)};
+      case 'baixarPdf': st.baixados.push(req.idPdf); return {ok:true,nome:'simulado.pdf',base64:Buffer.from('%PDF-1.4 teste').toString('base64')};
+      case 'enviarPdf': if(papel!=='gestor') return {ok:false,erro:'proibido'}; st.pdfs.unshift({id:'PN'+(++st.seq),titulo:req.titulo,descricao:req.descricao,tamanho:Buffer.from(req.base64,'base64').length,liberarEm:req.liberarEm,liberado:true,downloads:0}); st.enviado=Buffer.from(req.base64,'base64').toString(); return {ok:true};
+      case 'editarPdf': { const p=st.pdfs.find(y=>y.id===req.idPdf); Object.assign(p,{titulo:req.titulo,descricao:req.descricao,liberarEm:req.liberarEm}); return {ok:true}; }
+      case 'removerPdf': st.pdfs=st.pdfs.filter(y=>y.id!==req.idPdf); return {ok:true};
       case 'editarErro': { const e=st.erros.find(x=>x.linha===req.linha); if(e.parte!==req.antes.parte) return {ok:false,erro:'mudou',msg:'mudou'}; Object.assign(e,req.depois); return {ok:true}; }
       case 'excluirErro': st.erros=st.erros.filter(x=>x.linha!==req.linha); return {ok:true};
       case 'atualizar': return {ok:true,dados:dados(),atualizado:'31/10/2026 01:30'};
@@ -51,10 +61,33 @@ function novoServidor(){
   ok((await p.textContent('.grade4')).includes('Química – Estequiometria'),'cartão de erros mostra Matéria – Tema');
   ok((await p.$$eval('.sec',x=>x.map(y=>y.textContent))).includes('Temas com mais erros')&&!(await p.content()).includes('Por que você erra'),'"Por que você erra" virou "Temas com mais erros"');
   ok((await p.textContent('.caixa[aria-pressed="true"]')).includes('Meu painel'),'começa em Meu painel');
+  ok((await p.textContent('.rev-card')).includes('Hoje, comece por')&&(await p.textContent('.rev-card')).includes('Química – Estequiometria'),'revisão de hoje no painel, com o tema vencido');
+  // ---------- regras da agenda (7 dias × 1,4 até 30) ----------
+  const ag=await p.evaluate(()=>{const A=window.Registros.agenda,E=[{materia:'Física',tema:'Óptica',data:'2026-10-01',questao:'101',simulado:'S'}];
+    const seq=[],revs=[];let hoje='2026-10-08';
+    for(let i=0;i<7;i++){const a=A(E,revs,hoje)[0];seq.push(a.situacao+':'+a.intervalo+':'+(a.proxima||'-'));if(a.situacao==='consolidado')break;revs.push({materia:'Física',tema:'Óptica',resultado:'bem',data:a.proxima});hoje=a.proxima;}
+    const dif=A(E,[{materia:'Física',tema:'óptica',resultado:'dificil',data:'2026-10-08'}],'2026-10-09')[0];
+    const novoErro=A(E.concat([{materia:'Física',tema:'Optica',data:'2026-10-12',questao:'',simulado:'T'}]),[{materia:'Física',tema:'Óptica',resultado:'bem',data:'2026-10-08'}],'2026-10-13')[0];
+    return {seq,etapas:window.Registros.ETAPAS,dif:dif.proxima,novo:[novoErro.proxima,novoErro.nErros]};});
+  ok(JSON.stringify(ag.etapas)==='[7,10,14,19,27,30]','intervalos 7 → 10 → 14 → 19 → 27 → 30');
+  ok(ag.seq.map(s=>s.split(':').slice(1).join(':')).join(' ')==='7:2026-10-08 10:2026-10-18 14:2026-11-01 19:2026-11-20 27:2026-12-17 30:2027-01-16 30:-'&&ag.seq[6].indexOf('consolidado')===0,'cada revisão boa multiplica por 1,4; teto de 30; depois consolida '+ag.seq.join(' | '));
+  ok(ag.dif==='2026-10-15','"ainda tenho dificuldade" volta para 7 dias');
+  ok(ag.novo[0]==='2026-10-19'&&ag.novo[1]===2,'erro novo no tema (grafia diferente) recomeça em 7 dias');
+  await p.click('.rev-item button:has-text("Revisei: fui bem")');await p.waitForTimeout(300);
+  ok(srv.st.revs.length===1&&srv.st.revs[0].resultado==='bem','marca a revisão no servidor');
+  ok((await p.textContent('.toast')).includes('Próxima revisão')&&(await p.textContent('.toast')).includes('10 dias'),'avisa a próxima revisão (10 dias)');
+  ok((await p.textContent('.rev-card')).includes('Tudo em dia'),'tema revisado sai da lista de hoje');
   ok(!!(await p.$('.grade4')),'painel com os cartões dentro da caixa');
   await p.screenshot({path:__dirname+'/aluno_caixas.png'});
   await p.click('.caixa:has-text("Simulados")');await p.waitForTimeout(400);
   ok((await p.textContent('.reg-titulo'))==='Meus simulados','abre Simulados');
+  await p.waitForTimeout(200);
+  ok((await p.$$('.pdf-card .pdf-item')).length===1,'aluno vê só o PDF já liberado');
+  await p.click('.pdf-item button:has-text("Baixar PDF")');await p.waitForTimeout(300);
+  ok(srv.st.baixados[0]==='P1','baixa pelo servidor (sem link público)');
+  await p.click('.pdf-item button:has-text("Lançar resultado")');await p.waitForTimeout(200);
+  ok(await p.inputValue('input[aria-label="Nome da prova"]')==='Simulado Cálculo Aprovação 1','"Lançar resultado" já preenche o nome da prova');
+  await p.click('.form-reg button:has-text("Cancelar")');await p.waitForTimeout(100);
   ok((await p.textContent('.atalhos-pend')).includes('SAS 1 2024 — falta o Dia 2'),'sugere completar o Dia 2');
   await p.click('.atalhos-pend .chip');await p.waitForTimeout(200);
   ok(await p.inputValue('input[aria-label="Nome da prova"]')==='SAS 1 2024','atalho preenche a prova');
@@ -97,6 +130,9 @@ function novoServidor(){
   // ---------- Caderno ----------
   await p.click('.caixa:has-text("Caderno")');await p.waitForTimeout(400);
   ok((await p.textContent('.reg-titulo'))==='Caderno de erros','abre o Caderno de erros');
+  ok((await p.textContent('.aviso.faltam')).includes('Faltam 92 erros'),'mostra quantos erros faltam registrar (pelos acertos)');
+  ok((await p.textContent('.campo .dica')).includes('Natureza 18'),'mostra o que falta no simulado escolhido');
+  ok((await p.textContent('.progresso-areas')).includes('Humanas 0 de 17'),'progresso por área em cada simulado');
   ok((await p.inputValue('select[aria-label="Simulado"]'))==='Bernoulli 2 2025','já sugere o simulado mais recente');
   await p.selectOption('select[aria-label="Matéria"]','Química');
   ok((await p.$$eval('#partes-sugestoes option',o=>o.map(x=>x.value))).includes('Estequiometria'),'sugere temas já usados na matéria');
@@ -111,6 +147,12 @@ function novoServidor(){
   await p.selectOption('select[aria-label="Matéria"]','Física');await p.fill('input[aria-label="Tema"]','Cinemática');await p.selectOption('select[aria-label="Motivo do erro"]','Falta de atenção');
   await p.fill('input[aria-label="Número da questão"]','112');await p.click('text=+ Adicionar à lista');await p.waitForTimeout(100);
   ok((await p.textContent('.form-reg .erro')).includes('já está no caderno'),'avisa questão repetida no mesmo simulado');
+  ok((await p.textContent('.dica.alerta'))==='','sem alerta quando a questão bate com a área (112 = Natureza)');
+  await p.fill('input[aria-label="Número da questão"]','150');
+  await p.click('text=+ Adicionar à lista');await p.waitForTimeout(100);
+  ok((await p.textContent('.dica.alerta')).includes('é de Matemática'),'avisa quando o número não bate com a área no ENEM (150 = Matemática)');
+  await p.click('.item-erro.pend:has-text("150") button');await p.waitForTimeout(50);
+  await p.selectOption('select[aria-label="Matéria"]','Física');await p.fill('input[aria-label="Tema"]','Cinemática');await p.selectOption('select[aria-label="Motivo do erro"]','Falta de atenção');
   await p.fill('input[aria-label="Número da questão"]','98');
   await p.click('text=+ Adicionar à lista');await p.waitForTimeout(100);
   ok((await p.$$('.item-erro.pend')).length===2,'dois erros na lista antes de salvar');
@@ -193,4 +235,31 @@ function novoServidor(){
   srv.st.soVer=true;await p.click('.aba:has-text("Rotina")');await p.waitForTimeout(400);
   ok(!(await p.$('text=Editar rotina'))&&(await p.textContent('.reg-topo .nota')).includes('só visualiza'),'quem não é o mentor cadastrado só visualiza');
   ok(erros.length===0,'mentor: sem erros de JavaScript '+erros.join(';'));await p.close();}
+ // ---------- Gestor: simulados em PDF ----------
+ {const srv=novoServidor();const p=await b.newPage({viewport:{width:1100,height:900}});const erros=[];p.on('pageerror',e=>erros.push(e.message));
+  await p.route('**/accounts.google.com/**',r=>r.abort());
+  await p.route('**/script.google.com/**',async r=>{const q=JSON.parse(r.request().postData());let res=srv.resp(q,'gestor');
+    if(q.acao==='inicio') res={ok:true,papel:'gestor',quem:{nome:'Gestor',via:'codigo',gestor:true},fases:{lancamentos:true,caderno:true,rotina:true,revisao:true,pdfs:true},atualizado:'',alunos:[{id:'A1',aluno:'Aluna Exemplo',mentor:'Mentor Exemplo',nSims:1}],mentores:[]};
+    r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(res)});});
+  await p.addInitScript(()=>{try{localStorage.clear()}catch(e){}});
+  await p.goto(SITE);await p.waitForTimeout(300);
+  await p.fill('input[aria-label="Código de acesso"]','ABCD-EFGH');await p.click('text=Entrar com o código');await p.waitForTimeout(700);
+  await p.click('.secoes button:has-text("Simulados em PDF")');await p.waitForTimeout(400);
+  ok((await p.$$('.pdf-item')).length===2&&(await p.textContent('.selo-agendado'))==='agendado','gestor vê os liberados e os agendados');
+  const pdf=require('path').join(__dirname,'.teste.pdf');require('fs').writeFileSync(pdf,'%PDF-1.4\n% simulado de teste\n');
+  await p.setInputFiles('input[aria-label="Arquivo PDF"]',pdf);
+  ok(await p.inputValue('input[aria-label="Nome do simulado"]')==='.teste','nome sugerido pelo arquivo');
+  await p.fill('input[aria-label="Nome do simulado"]','Simulado Cálculo Aprovação 3');
+  await p.click('text=Publicar simulado');await p.waitForTimeout(600);
+  ok(srv.st.pdfs[0].titulo==='Simulado Cálculo Aprovação 3'&&srv.st.enviado.startsWith('%PDF'),'publica o PDF (arquivo chega inteiro ao servidor)');
+  require('fs').unlinkSync(pdf);
+  await p.click('.pdf-item:has-text("Aprovação 2") button:has-text("Editar")');await p.waitForTimeout(100);
+  await p.fill('.reg-lista input[aria-label="Liberar em"]','2026-11-01');await p.click('.form-reg button:has-text("Salvar")');await p.waitForTimeout(500);
+  ok(srv.st.pdfs.find(y=>y.id==='P2').liberarEm==='2026-11-01','edita a data de liberação');
+  await p.click('.pdf-item:has-text("Aprovação 1") button:has-text("Remover")');await p.click('.mini.perigo');await p.waitForTimeout(500);
+  ok(!srv.st.pdfs.some(y=>y.id==='P1'),'remove do app');
+  await p.screenshot({path:__dirname+'/gestor_pdfs.png',fullPage:true});
+  await p.click('.secoes button:has-text("Alunos")');await p.waitForTimeout(500);
+  ok(!!(await p.$('select[aria-label="Escolher aluno"]')),'volta para a lista de alunos');
+  ok(erros.length===0,'gestor: sem erros de JavaScript '+erros.join(';'));await p.close();}
  await b.close();console.log(falhas?falhas+' falha(s)':'TUDO OK');process.exit(falhas?1:0);})();

@@ -245,3 +245,34 @@
   .hoje-lista { display: grid; gap: 6px; }
   .hoje-bloco { white-space: pre-wrap; font-size: 14px; padding: 8px 10px; border-left: 5px solid var(--linha); background: var(--fundo); border-radius: 0 8px 8px 0; }
   @media (max-width: 520px) { .ferramentas { position: static; } .sw-cor { width: 32px; height: 32px; } }
+
+  /* ---------- Revisão espaçada, simulados em PDF e erros que faltam ---------- */
+  .rev-card { display: grid; gap: 12px; border: 1.5px solid #C9D6EA; }
+  .rev-cab { display: flex; gap: 8px 14px; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; }
+  .rev-cab h3 { margin: 0; font-size: 18px; text-transform: none; letter-spacing: 0; color: var(--texto); }
+  .rev-resumo { font-size: 12.5px; color: var(--suave); white-space: nowrap; }
+  .rev-msg { margin: 0; font-size: 15px; line-height: 1.45; padding: 10px 12px; border-radius: 10px; background: #EEF3FA; border-left: 4px solid var(--azul); }
+  .rev-msg.ok { background: #EAF6EF; border-left-color: var(--bom); }
+  .rev-lista { display: grid; gap: 8px; }
+  .rev-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--linha); }
+  .rev-item-txt { display: grid; gap: 2px; min-width: 0; }
+  .rev-item-txt small { color: var(--suave); font-size: 12.5px; }
+  @media (max-width: 620px) { .rev-item { grid-template-columns: 1fr; } }
+  .rev-mais summary { cursor: pointer; font-size: 13.5px; font-weight: 600; color: var(--acento); padding: 4px 0; }
+  .rev-prox { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .pdf-card { display: grid; gap: 10px; border: 1.5px solid #C9D6EA; }
+  .pdf-lista { display: grid; gap: 0; }
+  .pdf-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; }
+  .pdf-lista .pdf-item { padding: 10px 0; border-top: 1px solid var(--linha); }
+  .pdf-item.oculto { display: none; }
+  .pdf-txt { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+  .pdf-txt small { color: var(--suave); font-size: 12.5px; }
+  @media (max-width: 620px) { .pdf-item { grid-template-columns: 1fr; } }
+  .selo-novo, .selo-agendado { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; margin-left: 8px; vertical-align: 2px; }
+  .selo-novo { background: #E3F4EA; color: var(--bom); }
+  .selo-agendado { background: #FFF4DC; color: var(--aviso); }
+  .seg.secoes { justify-self: start; }
+  .aviso.faltam { background: #FFF8E8; border-color: #E9C46A; }
+  .progresso-areas { display: flex; gap: 6px; flex-wrap: wrap; margin: 2px 0 4px; }
+  .progresso-areas .tag.completo { background: #E3F4EA; border-color: #BFE3CD; color: var(--bom); }
+  .dica.alerta { color: var(--aviso); font-weight: 600; }
