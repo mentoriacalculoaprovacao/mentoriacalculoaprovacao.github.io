@@ -45,9 +45,10 @@ window.Painel = (function () {
       evol: completos.length >= 2 ? (acerto(completos[completos.length - 1]) - acerto(completos[0])) * 100 : null,
       red: reds.length ? reds[reds.length - 1].R : null, varRed: reds.length >= 2 ? reds[reds.length - 1].R - reds[0].R : null
     };
-    var c = {}, m = {};
-    d.erros.forEach(function (e) { var k = cap(e.materia); if (k) c[k] = (c[k] || 0) + 1; if (e.motivo) m[e.motivo] = (m[e.motivo] || 0) + 1; });
-    r.topMateria = topo(c); r.motivos = Object.keys(m).map(function (k) { return [k, m[k]]; }).sort(function (a, b) { return b[1] - a[1]; });
+    var c = {};
+    d.erros.forEach(function (e) { var k = cap(e.materia); if (k) c[k] = (c[k] || 0) + 1; });
+    r.topMateria = topo(c);
+    r.temas = temas(d.erros);
     r.errosUlt = ult ? d.erros.filter(function (e) { return norm(e.simulado) === norm(ult.prova); }).length : 0;
     r.niveis = AREAS.map(function (a) { return nivel(sims, a[0], a[1]); });
     r.intervir = intervir(sims, d.erros);
@@ -55,6 +56,19 @@ window.Painel = (function () {
   }
   function cap(s) { s = String(s || '').trim(); return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
   function topo(c) { var k = Object.keys(c).sort(function (a, b) { return c[b] - c[a] || a.localeCompare(b); }); return k.length ? k[0] : null; }
+
+  // Temas do caderno de erros como "Matéria – Tema", juntando grafias parecidas (acentos, maiúsculas); fica a grafia mais usada
+  function temas(erros) {
+    var g = {};
+    erros.forEach(function (e) {
+      var mat = cap(e.materia), t = String(e.parte || '').replace(/\s+/g, ' ').trim();
+      if (!mat || !t) return;
+      var k = norm(mat) + '|' + norm(t), x = g[k] = g[k] || { materia: mat, n: 0, grafias: {} };
+      x.n++; x.grafias[t] = (x.grafias[t] || 0) + 1;
+    });
+    return Object.keys(g).map(function (k) { var x = g[k], t = topo(x.grafias); return { materia: x.materia, tema: t, rotulo: x.materia + ' – ' + t, n: x.n }; })
+      .sort(function (a, b) { return b.n - a.n || a.rotulo.localeCompare(b.rotulo, 'pt-BR'); });
+  }
 
   function nivel(sims, k, nome) {
     var corte = k === 'R' ? CORTE_RED : CORTE_OBJ;
@@ -77,8 +91,8 @@ window.Painel = (function () {
       var k = it[1], com = sims.filter(function (s) { return ok(s[k]); }), s = com[com.length - 1];
       var ac = s ? s[k] / (k === 'R' ? 1000 : 45) : null;
       var meus = erros.filter(function (e) { return norm(e.materia) === norm(it[0]); });
-      var partes = {}, mot = {};
-      meus.forEach(function (e) { if (e.parte) partes[e.parte] = (partes[e.parte] || 0) + 1; if (e.motivo) mot[e.motivo] = (mot[e.motivo] || 0) + 1; });
+      var mot = {};
+      meus.forEach(function (e) { if (e.motivo) mot[e.motivo] = (mot[e.motivo] || 0) + 1; });
       var g = 3;
       if (ac !== null) {
         var b = k === 'R' ? 0.6 : 0.5, a = k === 'R' ? 0.8 : 0.75;
@@ -86,7 +100,7 @@ window.Painel = (function () {
         if (meus.length >= 3 && meus.length / Math.max(1, total) >= 0.2) g = Math.max(0, g - 1);
       }
       return { materia: it[0], area: AREAS.filter(function (x) { return x[0] === k; })[0][1], grupo: g, acerto: ac, prova: s ? s.prova : null, erros: meus.length,
-        partes: Object.keys(partes).sort(function (x, y) { return partes[y] - partes[x]; }).slice(0, 4).map(function (x) { return x + ' (' + partes[x] + ')'; }), motivo: topo(mot) };
+        temas: temas(meus).slice(0, 4), motivo: topo(mot) };
     });
   }
 
@@ -210,7 +224,7 @@ window.Painel = (function () {
       kpi('#5b5bd6', 'rgba(91,91,214,.12)', ['M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z', 'M12 7a5 5 0 1 0 0 10a5 5 0 1 0 0-10z'], 'Acerto nas objetivas', a === null ? '—' : pct(a), a === null ? '' : a >= META_ACERTO ? 'bom' : 'ruim', aNota),
       kpi('#5D6B7E', 'rgba(16,32,46,.07)', ['M9 6h11M9 12h11M9 18h11', 'M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2'], 'Simulados lançados', String(r.sims.length), '', evNota),
       kpi('#C2362F', 'rgba(194,54,47,.12)', ['M4 20h4L19 9l-4-4L4 16z', 'M13 7l4 4'], 'Última redação', r.red === null ? '—' : String(r.red), r.red === null ? '' : r.red >= META_RED ? 'bom' : 'ruim', r.red === null ? 'nenhuma redação lançada' : 'meta ' + META_RED + (r.varRed === null ? '' : ' · ' + (r.varRed > 0 ? '+' : '') + r.varRed + ' desde a 1ª')),
-      kpi('#1E8E5A', 'rgba(30,142,90,.12)', ['M4 5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2z', 'M9 8l6 6M15 8l-6 6'], 'Erros no caderno', String(d.erros.length), '', d.erros.length ? 'mais em ' + r.topMateria + (r.ult ? ' · ' + r.errosUlt + ' do último simulado' : '') : (M ? 'caderno de erros ainda vazio' : 'registre os erros de cada simulado'))
+      kpi('#1E8E5A', 'rgba(30,142,90,.12)', ['M4 5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2z', 'M9 8l6 6M15 8l-6 6'], 'Erros no caderno', String(d.erros.length), '', d.erros.length ? 'mais em ' + (r.temas.length ? r.temas[0].rotulo : r.topMateria) + (r.ult ? ' · ' + r.errosUlt + ' do último simulado' : '') : (M ? 'caderno de erros ainda vazio' : 'registre os erros de cada simulado'))
     ]));
 
     // Níveis
@@ -240,10 +254,12 @@ window.Painel = (function () {
       var lista = el('div', { class: 'lista' });
       if (!itens.length) lista.appendChild(el('p', { class: 'vazio', text: 'Nenhuma matéria aqui.' }));
       itens.forEach(function (x) {
-        var info = (x.acerto === null ? 'sem simulado da área' : pct(x.acerto) + ' no ' + x.prova) + ' · ' + x.erros + (x.erros === 1 ? ' erro' : ' erros') + ' no caderno';
-        var box = el('div', { class: 'mat' }, [el('div', { class: 'mat-top' }, [el('span', { class: 'mat-nome', text: x.materia }), el('span', { class: 'mat-info', text: info })])]);
+        var info = (x.acerto === null ? 'sem simulado da área' : pct(x.acerto) + ' no ' + x.prova) + ' · ' + x.erros + (x.erros === 1 ? ' erro' : ' erros') + ' no caderno' +
+          (x.temas.length && x.temas[0].n < x.erros ? ' (' + x.temas[0].n + ' neste tema)' : '');
+        // Título com o tema que mais aparece no caderno ("Física – Eletrodinâmica"); os outros temas vêm logo abaixo
+        var box = el('div', { class: 'mat' }, [el('div', { class: 'mat-top' }, [el('span', { class: 'mat-nome', text: x.temas.length ? x.temas[0].rotulo : x.materia }), el('span', { class: 'mat-info', text: info })])]);
         if (x.acerto !== null) box.appendChild(el('div', { class: 'barra' }, [el('span', { style: 'width:' + Math.round(x.acerto * 100) + '%;background:' + gr[1] })]));
-        if (x.partes.length) box.appendChild(el('div', { class: 'tags' }, x.partes.map(function (p) { return el('span', { class: 'tag', text: p }); })));
+        if (x.temas.length > 1) box.appendChild(el('div', { class: 'tags' }, x.temas.slice(1).map(function (t) { return el('span', { class: 'tag', text: t.rotulo + ' · ' + t.n + (t.n === 1 ? ' erro' : ' erros') }); })));
         if (x.motivo) box.appendChild(el('span', { class: 'nota', style: 'margin:0', text: 'Motivo mais comum: ' + x.motivo }));
         lista.appendChild(box);
       });
@@ -253,12 +269,13 @@ window.Painel = (function () {
     });
     raiz.appendChild(foco);
 
-    // Caderno
-    raiz.appendChild(el('div', { class: 'sec', text: M ? 'Por que erra' : 'Por que você erra' }));
+    // Caderno: temas com mais erros
+    raiz.appendChild(el('div', { class: 'sec', text: 'Temas com mais erros' }));
     var cad = el('div', { class: 'card' });
-    if (!r.motivos.length) cad.appendChild(el('p', { class: 'vazio', text: M ? 'Quando o aluno registrar erros no caderno, os motivos mais frequentes aparecem aqui.' : 'Quando você registrar erros no caderno, os motivos mais frequentes aparecem aqui.' }));
-    var maxM = r.motivos.length ? r.motivos[0][1] : 1;
-    r.motivos.slice(0, 6).forEach(function (m, i) { cad.appendChild(el('div', { class: 'motivo' }, [el('span', { text: m[0] }), el('div', { class: 'barra' }, [el('span', { style: 'width:' + Math.round(m[1] / maxM * 100) + '%;background:' + (i ? '#AAB3C0' : 'var(--azul)') })]), el('b', { text: String(m[1]) })])); });
+    if (!r.temas.length) cad.appendChild(el('p', { class: 'vazio', text: M ? 'Quando o aluno registrar erros no caderno, os temas em que ele mais erra aparecem aqui.' : 'Quando você registrar erros no caderno, os temas em que você mais erra aparecem aqui.' }));
+    var maxT = r.temas.length ? r.temas[0].n : 1;
+    r.temas.slice(0, 8).forEach(function (t, i) { cad.appendChild(el('div', { class: 'motivo' }, [el('span', { text: t.rotulo }), el('div', { class: 'barra' }, [el('span', { style: 'width:' + Math.round(t.n / maxT * 100) + '%;background:' + (i ? '#AAB3C0' : 'var(--azul)') })]), el('b', { text: String(t.n) })])); });
+    if (r.temas.length > 8) cad.appendChild(el('p', { class: 'nota', style: 'margin:8px 0 0', text: 'Mais ' + (r.temas.length - 8) + (r.temas.length - 8 === 1 ? ' tema' : ' temas') + ' no caderno de erros.' }));
     raiz.appendChild(cad);
     raiz.appendChild(el('p', { class: 'rodape', text: M ? 'Dados da planilha de mentoria e dos simulados lançados por este aluno. Você vê só os alunos cadastrados com você como mentor.' : 'Seus dados vêm da sua planilha de mentoria e dos simulados que você lançou. Dúvidas? Fale com seu mentor.' }));
   }

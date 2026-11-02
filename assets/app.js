@@ -1,4 +1,4 @@
-// Fluxo do app: login (Google ou código), lista de alunos (mentor e gestor), abas Painel e Diagnóstico.
+// Fluxo do app: login (Google ou código), caixas do aluno, lista de alunos (mentor e gestor) e abas de cada aluno.
 // Toda regra de quem vê o quê fica no servidor (Apps Script, API.gs): esta página só mostra o que ele devolve.
 (function () {
   var C = window.CONFIG || {};
@@ -40,7 +40,7 @@
     var papel = quem.gestor ? 'Gestor' : quem.mentor ? 'Mentor' : '';
     topoDir.appendChild(el('span', { class: 'quem', text: (papel ? papel + ' · ' : '') + (quem.nome || quem.email || '') }));
     var bt = el('button', { class: 'sair', type: 'button', text: 'Sair' });
-    bt.onclick = function () { encerrar(''); };
+    bt.onclick = function () { if (!R.podeSair()) return; encerrar(''); };
     topoDir.appendChild(bt);
   }
 
@@ -203,11 +203,12 @@
     botaoGoogle(lugar, erro, function (cred) { vincular({ credencial: cred, sessao: est.sessao }, ''); });
   }
 
-  // ---------- Aluno: três caixas (Meu painel · Simulados · Caderno de erros) ----------
+  // ---------- Aluno: caixas (Meu painel · Simulados · Caderno de erros · Rotina) ----------
   var ICONES = {
     painel: ['M4 19V10M10 19V5M16 19v-7M22 19H2'],
     simulados: ['M9 5h11M9 12h11M9 19h11', 'M4 5l1 1 2-2M4 12l1 1 2-2M4 19l1 1 2-2'],
-    caderno: ['M4 5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2z', 'M9 8l6 6M15 8l-6 6']
+    caderno: ['M4 5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2z', 'M9 8l6 6M15 8l-6 6'],
+    rotina: ['M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z', 'M4 10h16M9 3v4M15 3v4', 'M8 14h3M13 14h3M8 17h3']
   };
   function icone(nome) {
     var s = P.sv('svg', { viewBox: '0 0 24 24', width: 22, height: 22, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' });
@@ -222,13 +223,14 @@
     var opcoes = [['painel', 'Meu painel', 'Acertos, níveis e onde focar']];
     if (d.fases && d.fases.lancamentos) opcoes.push(['simulados', 'Simulados', 'Lance e confira seus simulados']);
     if (d.fases && d.fases.caderno) opcoes.push(['caderno', 'Caderno de erros', 'Registre onde você errou']);
+    if (d.fases && d.fases.rotina) opcoes.push(['rotina', 'Rotina', 'Sua semana organizada pelo mentor']);
     if (!opcoes.some(function (o) { return o[0] === est.abaAluno; })) est.abaAluno = 'painel';
     var area = el('div', { class: 'aluno-area' });
     if (opcoes.length > 1) {
-      var nav = el('nav', { class: 'caixas', 'aria-label': 'Seções do app', style: 'grid-template-columns:repeat(' + opcoes.length + ',minmax(0,1fr))' });
+      var nav = el('nav', { class: 'caixas' + (opcoes.length === 4 ? ' quatro' : ''), 'aria-label': 'Seções do app', style: '--n:' + opcoes.length });
       opcoes.forEach(function (o) {
         var b = el('button', { class: 'caixa', type: 'button', 'aria-pressed': String(est.abaAluno === o[0]) }, [icone(o[0]), el('b', { text: o[1] }), el('span', { text: o[2] })]);
-        b.onclick = function () { est.abaAluno = o[0]; gravar('mentoria_aba_aluno', o[0]); montarAluno(); };
+        b.onclick = function () { if (!R.podeSair()) return; est.abaAluno = o[0]; gravar('mentoria_aba_aluno', o[0]); montarAluno(); };
         nav.appendChild(b);
       });
       app.appendChild(nav);
@@ -237,6 +239,7 @@
     var ctx = { api: api, id: null, mentor: false, aviso: aviso, aoMudar: function () { atualizarAluno(null); } };
     if (est.abaAluno === 'simulados') R.simulados(area, ctx);
     else if (est.abaAluno === 'caderno') R.caderno(area, ctx);
+    else if (est.abaAluno === 'rotina') R.rotina(area, ctx);
     else P.montar(d.dados, { raiz: area, semCabecalho: true });
   }
 
@@ -341,6 +344,7 @@
       ant.disabled = i <= 0; prox.disabled = i < 0 || i >= visiveis.length - 1;
     }
     function mostrar(id) {
+      if (!R.podeSair()) { if (est.atual) sel.value = est.atual; return; }
       area.innerHTML = '';
       if (!id) { est.atual = null; passos(); area.appendChild(el('p', { class: 'vazio', text: 'Nenhum aluno neste filtro.' })); return; }
       est.atual = id; sel.value = id; gravar('mentoria_aluno', id); passos();
@@ -390,13 +394,14 @@
     var abas = [['painel', 'Painel']];
     if (!x.semPlanilha && fases.lancamentos) abas.push(['simulados', 'Simulados']);
     if (!x.semPlanilha && fases.caderno) abas.push(['caderno', 'Caderno de erros']);
+    if (!x.semPlanilha && fases.rotina) abas.push(['rotina', 'Rotina']);
     if (temDiag) abas.push(['diagnostico', 'Diagnóstico']);
     if (!abas.some(function (a) { return a[0] === est.aba; })) est.aba = x.semPlanilha && temDiag ? 'diagnostico' : 'painel';
     var barraAbas = el('div', { class: 'abas', role: 'tablist' });
     var conteudo = el('div', { class: 'aluno-area', role: 'tabpanel' });
     abas.forEach(function (a) {
       var b = el('button', { class: 'aba', type: 'button', role: 'tab', 'aria-selected': String(est.aba === a[0]), text: a[1] });
-      b.onclick = function () { est.aba = a[0]; gravar('mentoria_aba', a[0]); desenharAluno(area, x); };
+      b.onclick = function () { if (!R.podeSair()) return; est.aba = a[0]; gravar('mentoria_aba', a[0]); desenharAluno(area, x); };
       barraAbas.appendChild(b);
     });
     if (abas.length > 1) area.appendChild(barraAbas);
@@ -405,6 +410,7 @@
     if (est.aba === 'diagnostico' && temDiag) desenharDiagnostico(conteudo, x.diagnostico, x);
     else if (est.aba === 'simulados' && !x.semPlanilha) R.simulados(conteudo, ctx);
     else if (est.aba === 'caderno' && !x.semPlanilha) R.caderno(conteudo, ctx);
+    else if (est.aba === 'rotina' && !x.semPlanilha) R.rotina(conteudo, ctx);
     else if (x.semPlanilha) conteudo.appendChild(el('div', { class: 'aviso', text: 'Este aluno respondeu o diagnóstico, mas as planilhas dele ainda não foram criadas. Elas são criadas automaticamente; se demorar, use Mentoria → "Criar planilhas dos alunos pendentes".' }));
     else P.montar(x, { mentor: true, raiz: conteudo, semCabecalho: true });
   }

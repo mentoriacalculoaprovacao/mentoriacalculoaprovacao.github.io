@@ -1,4 +1,4 @@
-// Simulados e caderno de erros: o aluno lança e corrige pelo app; mentor e gestor usam os mesmos blocos dentro do aluno.
+// Simulados, caderno de erros e rotina: o aluno lança e corrige pelo app; mentor e gestor usam os mesmos blocos dentro do aluno.
 // c = { api, id (null = o próprio aluno), mentor (bool), aviso(texto, erro), aoMudar() }
 window.Registros = (function () {
   var P = window.Painel, el = P.el, norm = P.norm;
@@ -240,8 +240,8 @@ window.Registros = (function () {
 
       raiz.appendChild(el('div', { class: 'reg-topo' }, [el('div', {}, [
         el('h2', { class: 'reg-titulo', text: 'Caderno de erros' }),
-        el('p', { class: 'nota', style: 'margin:2px 0 0', text: c.mentor ? 'Erros registrados pelo aluno, com a matéria, a parte da matéria e o motivo.'
-          : 'Registre cada questão que você errou: em qual simulado, a matéria, a parte da matéria e o motivo. É assim que a gente descobre onde intervir.' })])]));
+        el('p', { class: 'nota', style: 'margin:2px 0 0', text: c.mentor ? 'Erros registrados pelo aluno: simulado, matéria, tema, motivo e o número da questão, para você conferir.'
+          : 'Registre cada questão que você errou: o simulado, a matéria, o tema, o número da questão e o motivo. É assim que a gente descobre onde intervir.' })])]));
 
       // Resumo por matéria
       if (r.erros.length) {
@@ -267,7 +267,8 @@ window.Registros = (function () {
       selMat.appendChild(el('option', { value: '', text: 'Matéria…' }));
       r.materias.forEach(function (m) { selMat.appendChild(el('option', { value: m, text: m })); });
       var dl = el('datalist', { id: 'partes-sugestoes' });
-      var parte = el('input', { type: 'text', list: 'partes-sugestoes', placeholder: 'Parte da matéria (ex.: Estequiometria)', maxlength: '200', 'aria-label': 'Parte da matéria' });
+      var parte = el('input', { type: 'text', list: 'partes-sugestoes', placeholder: 'Tema (ex.: Eletrodinâmica)', maxlength: '200', 'aria-label': 'Tema' });
+      var questao = el('input', { type: 'text', inputmode: 'numeric', pattern: '[0-9]*', placeholder: 'Nº da questão', maxlength: '3', 'aria-label': 'Número da questão', class: 'num-questao' });
       selMat.onchange = function () { dl.innerHTML = ''; (partesDe[selMat.value] || []).forEach(function (p) { dl.appendChild(el('option', { value: p })); }); };
       var selMot = el('select', { 'aria-label': 'Motivo do erro' });
       selMot.appendChild(el('option', { value: '', text: 'Motivo do erro…' }));
@@ -287,26 +288,30 @@ window.Registros = (function () {
         pendentes.forEach(function (p, i) {
           var rm = el('button', { class: 'mini', type: 'button', 'aria-label': 'Remover', text: '✕' });
           rm.onclick = function () { pendentes.splice(i, 1); desenharPend(); };
-          listaPend.appendChild(el('div', { class: 'item-erro pend' }, [el('span', { class: 'tag', text: p.materia }), el('span', { class: 'item-txt', text: p.parte + ' · ' + p.motivo }), rm]));
+          listaPend.appendChild(el('div', { class: 'item-erro pend' }, [el('span', { class: 'tag', text: p.materia }), el('span', { class: 'item-txt', text: 'Questão ' + p.questao + ' · ' + p.parte + ' · ' + p.motivo }), rm]));
         });
         btSalvar.disabled = !pendentes.length;
         btSalvar.textContent = pendentes.length ? 'Salvar ' + pendentes.length + (pendentes.length === 1 ? ' erro' : ' erros') : 'Salvar';
       }
       function adicionar() {
         erro.textContent = '';
-        var e = { simulado: simEscolhido(), materia: selMat.value, parte: parte.value.trim(), motivo: motEscolhido() };
+        var e = { simulado: simEscolhido(), materia: selMat.value, parte: parte.value.trim(), questao: questao.value.trim(), motivo: motEscolhido() };
         if (!e.simulado) { erro.textContent = 'Escolha o simulado.'; return false; }
         if (!e.materia) { erro.textContent = 'Escolha a matéria.'; selMat.focus(); return false; }
-        if (!e.parte) { erro.textContent = 'Escreva a parte da matéria em que errou.'; parte.focus(); return false; }
+        if (!e.parte) { erro.textContent = 'Escreva o tema em que errou.'; parte.focus(); return false; }
+        if (!/^[0-9]{1,3}$/.test(e.questao) || Number(e.questao) < 1) { erro.textContent = 'Informe o número da questão (ex.: 45).'; questao.focus(); return false; }
         if (!e.motivo) { erro.textContent = 'Escolha o motivo do erro.'; selMot.focus(); return false; }
+        if (pendentes.concat(r.erros).some(function (x) { return norm(x.simulado) === norm(e.simulado) && String(x.questao) === e.questao; })) {
+          erro.textContent = 'A questão ' + e.questao + ' deste simulado já está no caderno.'; questao.focus(); return false;
+        }
         pendentes.push(e);
         (partesDe[e.materia] = partesDe[e.materia] || []).indexOf(e.parte) < 0 && partesDe[e.materia].push(e.parte);
-        parte.value = ''; selMot.value = ''; outroMot.value = ''; outroMot.style.display = 'none';
+        parte.value = ''; questao.value = ''; selMot.value = ''; outroMot.value = ''; outroMot.style.display = 'none';
         desenharPend(); parte.focus();
         return true;
       }
       btAdd.onclick = adicionar;
-      parte.onkeydown = function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); adicionar(); } };
+      parte.onkeydown = questao.onkeydown = function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); adicionar(); } };
       btSalvar.onclick = function () {
         if (!pendentes.length) return;
         btSalvar.disabled = true; btSalvar.textContent = 'Salvando…';
@@ -322,8 +327,8 @@ window.Registros = (function () {
         el('h3', { text: 'Registrar erros' }),
         el('label', { class: 'campo' }, [el('span', { text: '1. Em qual simulado?' }), selSim, outroSim]),
         el('div', { class: 'campo' }, [el('span', { text: '2. Cada questão que errou' }),
-          el('div', { class: 'linha-erro' }, [selMat, parte, dl, selMot, outroMot, btAdd])]),
-        el('p', { class: 'nota', style: 'margin:0', text: 'Dica: aperte Enter depois de escrever a parte da matéria para adicionar e já começar o próximo.' }),
+          el('div', { class: 'linha-erro' }, [selMat, parte, dl, el('div', { class: 'motivo-campo' }, [selMot, outroMot]), questao, btAdd])]),
+        el('p', { class: 'nota', style: 'margin:0', text: 'Dica: aperte Enter no número da questão para adicionar e já começar o próximo. O simulado e a matéria continuam escolhidos.' }),
         listaPend, erro,
         el('div', { class: 'acoes-form' }, [btSalvar])
       ]));
@@ -334,7 +339,7 @@ window.Registros = (function () {
       if (!ordem.length) raiz.appendChild(el('div', { class: 'card vazio-card' }, [el('p', { class: 'vazio', text: c.mentor ? 'Nenhum erro registrado ainda.' : 'Nenhum erro registrado ainda. Comece pelo último simulado que você fez.' })]));
       ordem.forEach(function (k) {
         var card = el('div', { class: 'card' }, [el('div', { class: 'sim-cab' }, [el('b', { text: k }), el('span', { class: 'nota', style: 'margin:0', text: grupos[k].length + (grupos[k].length === 1 ? ' erro' : ' erros') })])]);
-        grupos[k].forEach(function (e) { card.appendChild(itemErro(e)); });
+        grupos[k].sort(function (a, b) { return (Number(a.questao) || 9999) - (Number(b.questao) || 9999); }).forEach(function (e) { card.appendChild(itemErro(e)); });
         raiz.appendChild(card);
       });
 
@@ -343,7 +348,8 @@ window.Registros = (function () {
         var ed = el('button', { class: 'mini', type: 'button', text: 'Editar' });
         var ex = el('button', { class: 'mini', type: 'button', text: 'Excluir' });
         acoes.appendChild(ed); acoes.appendChild(ex);
-        var item = el('div', { class: 'item-erro' }, [el('span', { class: 'tag', text: e.materia || '—' }), el('span', { class: 'item-txt' }, [el('span', { text: e.parte }), el('small', { text: e.motivo })]), acoes]);
+        var item = el('div', { class: 'item-erro' }, [el('span', { class: 'q-num' + (e.questao ? '' : ' sem'), title: 'Número da questão', text: e.questao ? 'Q' + e.questao : 'Q?' }),
+          el('span', { class: 'tag', text: e.materia || '—' }), el('span', { class: 'item-txt' }, [el('span', { text: e.parte }), el('small', { text: e.motivo })]), acoes]);
         ex.onclick = function () {
           confirmarInline(acoes, 'Excluir?', 'Excluir', function () {
             c.api('excluirErro', { id: c.id, linha: e.linha, antes: e }).then(function (x) {
@@ -354,7 +360,8 @@ window.Registros = (function () {
         };
         ed.onclick = function () {
           var sMat = el('select', { 'aria-label': 'Matéria' }); r.materias.forEach(function (m) { sMat.appendChild(el('option', { value: m, text: m })); }); sMat.value = e.materia;
-          var iPar = el('input', { type: 'text', maxlength: '200', 'aria-label': 'Parte da matéria' }); iPar.value = e.parte;
+          var iPar = el('input', { type: 'text', maxlength: '200', 'aria-label': 'Tema' }); iPar.value = e.parte;
+          var iQ = el('input', { type: 'text', inputmode: 'numeric', maxlength: '3', placeholder: 'Nº', 'aria-label': 'Número da questão', class: 'num-questao' }); iQ.value = e.questao || '';
           var sMot = el('input', { type: 'text', list: 'motivos-lista', maxlength: '80', 'aria-label': 'Motivo' }); sMot.value = e.motivo;
           var dlm = el('datalist', { id: 'motivos-lista' }); r.motivos.forEach(function (m) { dlm.appendChild(el('option', { value: m })); });
           var iSim = el('input', { type: 'text', list: 'simulados-lista', maxlength: '80', 'aria-label': 'Simulado' }); iSim.value = e.simulado;
@@ -362,12 +369,12 @@ window.Registros = (function () {
           var ok = el('button', { class: 'mini forte', type: 'button', text: 'Salvar' });
           var no = el('button', { class: 'mini', type: 'button', text: 'Cancelar' });
           var msg = el('small', { class: 'erro', text: '' });
-          var form = el('div', { class: 'item-erro editando' }, [el('div', { class: 'linha-erro' }, [iSim, dls, sMat, iPar, sMot, dlm]), el('div', { class: 'acoes' }, [ok, no]), msg]);
+          var form = el('div', { class: 'item-erro editando' }, [el('div', { class: 'linha-erro edicao' }, [iSim, dls, sMat, iPar, sMot, dlm, iQ]), el('div', { class: 'acoes' }, [ok, no]), msg]);
           item.replaceWith(form);
           no.onclick = function () { form.replaceWith(item); };
           ok.onclick = function () {
             ok.disabled = true; ok.textContent = 'Salvando…';
-            c.api('editarErro', { id: c.id, linha: e.linha, antes: e, depois: { simulado: iSim.value, materia: sMat.value, parte: iPar.value, motivo: sMot.value } }).then(function (x) {
+            c.api('editarErro', { id: c.id, linha: e.linha, antes: e, depois: { simulado: iSim.value, materia: sMat.value, parte: iPar.value, questao: iQ.value.trim(), motivo: sMot.value } }).then(function (x) {
               if (!x || !x.ok) { ok.disabled = false; ok.textContent = 'Salvar'; msg.textContent = msgErro(x); return; }
               c.aviso('Erro atualizado.'); caderno(raiz, c); c.aoMudar();
             }).catch(function () { ok.disabled = false; ok.textContent = 'Salvar'; msg.textContent = 'Sem conexão. Tente de novo.'; });
@@ -378,5 +385,222 @@ window.Registros = (function () {
     }
   }
 
-  return { simulados: simulados, caderno: caderno };
+  // ===================== Rotina =====================
+  // Grade de 7 colunas fixas (segunda a domingo) e linhas livres. O aluno só vê; mentor e gestor editam texto, linhas e cores.
+  var PALETA = [['', 'Sem cor'], ['#ff0000', 'Vermelho'], ['#ff9900', 'Laranja'], ['#ffff00', 'Amarelo'], ['#00ff00', 'Verde'],
+    ['#4a86e8', 'Azul'], ['#9900ff', 'Roxo'], ['#ff00ff', 'Rosa'], ['#0b2545', 'Azul-marinho'],
+    ['#f4cccc', 'Vermelho claro'], ['#fce5cd', 'Laranja claro'], ['#fff2cc', 'Amarelo claro'], ['#d9ead3', 'Verde claro'],
+    ['#c9daf8', 'Azul claro'], ['#d9d2e9', 'Roxo claro'], ['#ead1dc', 'Rosa claro'], ['#e0e0e0', 'Cinza']];
+  var NOMES_DIAS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
+  var rotinaSuja = false;
+  function corTexto(fundo) { // mesmo critério da planilha (contraste WCAG)
+    var c = String(fundo || '').toLowerCase();
+    if (!/^#[0-9a-f]{6}$/.test(c)) return '';
+    var lin = function (k) { var v = parseInt(c.substr(k, 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * lin(1) + 0.7152 * lin(3) + 0.0722 * lin(5) > 0.179 ? '#1f1f1f' : '#ffffff';
+  }
+  function pintar(no, cor) { no.style.background = cor || ''; no.style.color = cor ? corTexto(cor) : ''; }
+  function diaDeHoje() { var d = new Date().getDay(); return d === 0 ? 6 : d - 1; }
+  function linhaVazia() { return NOMES_DIAS.map(function () { return ''; }); }
+  function temTexto(l) { return l.some(function (t) { return String(t || '').trim(); }); }
+  function podeSair() {
+    if (!rotinaSuja) return true;
+    if (window.confirm('A rotina tem alterações não salvas. Sair mesmo assim?')) { rotinaSuja = false; window.onbeforeunload = null; return true; }
+    return false;
+  }
+
+  function rotina(raiz, c) {
+    rotinaSuja = false; window.onbeforeunload = null;
+    carregando(raiz, 'Carregando rotina…');
+    c.api('rotina', { id: c.id }).then(function (r) {
+      if (!r || !r.ok) { falha(raiz, r); return; }
+      ver(r);
+    }).catch(function (e) { if (e.message !== 'sessao') falha(raiz, null); });
+
+    function ver(r) {
+      rotinaSuja = false; window.onbeforeunload = null;
+      raiz.innerHTML = '';
+      var vazia = !r.linhas.some(temTexto);
+      var topo = el('div', { class: 'reg-topo' }, [el('div', {}, [
+        el('h2', { class: 'reg-titulo', text: c.mentor ? 'Rotina do aluno' : 'Minha rotina' }),
+        el('p', { class: 'nota', style: 'margin:2px 0 0', text: c.mentor ? 'O aluno vê esta rotina no app e na planilha dele. Só o mentor e a coordenação editam.'
+          : 'Organizada pelo seu mentor. Para mudar algum bloco, converse com ele.' })])]);
+      if (r.podeEditar) {
+        var bt = el('button', { class: 'botao peq', type: 'button', text: vazia ? 'Montar rotina' : 'Editar rotina' });
+        bt.onclick = function () { editar(r); };
+        topo.appendChild(bt);
+      }
+      raiz.appendChild(topo);
+      if (r.antiga && r.podeEditar) raiz.appendChild(el('div', { class: 'aviso', text: 'Esta rotina ainda está no formato antigo da planilha (segunda a sexta, 6 blocos, com o horário em cada bloco). Ao salvar pela primeira vez, ela passa para o formato novo, com sábado, domingo, linhas livres e cores.' }));
+      if (vazia) {
+        raiz.appendChild(el('div', { class: 'card vazio-card' }, [el('p', { class: 'vazio', text: c.mentor ? 'A rotina deste aluno ainda está vazia. Clique em "Montar rotina" para começar.' : 'Seu mentor ainda não montou a sua rotina. Ela aparece aqui assim que ele salvar.' })]));
+        return;
+      }
+      var h = diaDeHoje();
+      if (!c.mentor) {
+        var blocos = [];
+        r.linhas.forEach(function (l, i) { if (String(l[h] || '').trim()) blocos.push([l[h], r.cores[i][h]]); });
+        var hoje = el('div', { class: 'card hoje-card' }, [el('div', { class: 'hoje-tit' }, [el('b', { text: 'Hoje · ' + NOMES_DIAS[h] }), el('span', { class: 'nota', style: 'margin:0', text: blocos.length ? blocos.length + (blocos.length === 1 ? ' bloco' : ' blocos') : 'dia livre' })])]);
+        var lista = el('div', { class: 'hoje-lista' });
+        blocos.forEach(function (b) { var x = el('div', { class: 'hoje-bloco', text: b[0] }); if (b[1]) x.style.borderLeftColor = b[1]; lista.appendChild(x); });
+        if (blocos.length) hoje.appendChild(lista);
+        raiz.appendChild(hoje);
+      }
+      var tab = el('table', { class: 'rotina' }), cab = el('tr');
+      NOMES_DIAS.forEach(function (d, j) { cab.appendChild(el('th', { class: j === h ? 'hoje' : '', scope: 'col', text: d })); });
+      tab.appendChild(el('thead', {}, [cab]));
+      var corpo = el('tbody');
+      r.linhas.forEach(function (l, i) {
+        var tr = el('tr');
+        l.forEach(function (t, j) { var td = el('td', { class: j === h ? 'col-hoje' : '', text: t }); pintar(td, r.cores[i][j]); tr.appendChild(td); });
+        corpo.appendChild(tr);
+      });
+      tab.appendChild(corpo);
+      raiz.appendChild(el('div', { class: 'rotina-rolagem' }, [tab]));
+      raiz.appendChild(el('p', { class: 'nota', style: 'margin:0', text: 'No celular, deslize a tabela para o lado para ver todos os dias.' }));
+    }
+
+    function editar(r) {
+      var L = r.linhas.map(function (l) { return l.slice(); }), C = r.cores.map(function (l) { return l.slice(); });
+      if (!L.length) for (var k = 0; k < (r.padrao || 8); k++) { L.push(linhaVazia()); C.push(linhaVazia()); }
+      var sel = { i: 0, j: 0 }, alvo = 'celula', corAtual = PALETA[1][0];
+      raiz.innerHTML = '';
+      raiz.appendChild(el('div', { class: 'reg-topo' }, [el('div', {}, [
+        el('h2', { class: 'reg-titulo', text: 'Editando a rotina' }),
+        el('p', { class: 'nota', style: 'margin:2px 0 0', text: 'Escreva em cada bloco (Enter quebra a linha). Os dias da semana são fixos; as linhas você ajusta à vontade.' })])]));
+
+      // Barra de ferramentas: cores e linhas
+      var segs = el('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Aplicar a cor em' });
+      [['celula', 'Bloco'], ['linha', 'Linha inteira'], ['coluna', 'Dia inteiro']].forEach(function (o) {
+        var b = el('button', { type: 'button', role: 'radio', 'aria-checked': String(alvo === o[0]), text: o[1] });
+        b.onclick = function () { alvo = o[0]; Array.prototype.forEach.call(segs.children, function (x) { x.setAttribute('aria-checked', String(x === b)); }); };
+        segs.appendChild(b);
+      });
+      var cores = el('div', { class: 'paleta' });
+      PALETA.forEach(function (p) {
+        var b = el('button', { type: 'button', class: 'sw-cor' + (p[0] ? '' : ' sem'), title: p[1], 'aria-label': 'Pintar de ' + p[1].toLowerCase() });
+        if (p[0]) b.style.background = p[0];
+        b.onclick = function () { corAtual = p[0]; aplicarCor(); };
+        cores.appendChild(b);
+      });
+      var nLinhas = el('b', { class: 'n-linhas' });
+      var menos = el('button', { class: 'mini', type: 'button', 'aria-label': 'Tirar a última linha', text: '−' });
+      var mais = el('button', { class: 'mini', type: 'button', 'aria-label': 'Acrescentar uma linha no fim', text: '+' });
+      var avisoLinhas = el('span', { class: 'confirmar' });
+      menos.onclick = function () {
+        if (L.length <= 1) return;
+        if (temTexto(L[L.length - 1]) && avisoLinhas.textContent === '') { avisoLinhas.textContent = 'A última linha tem texto. Clique em − de novo para apagar.'; return; }
+        avisoLinhas.textContent = ''; L.pop(); C.pop(); mudou(); desenharGrade();
+      };
+      mais.onclick = function () { if (L.length >= (r.maxLinhas || 30)) return; avisoLinhas.textContent = ''; L.push(linhaVazia()); C.push(linhaVazia()); mudou(); desenharGrade(); };
+      raiz.appendChild(el('div', { class: 'card ferramentas' }, [
+        el('div', { class: 'ferr-linha' }, [el('span', { class: 'ferr-rot', text: 'Cor em:' }), segs]),
+        el('div', { class: 'ferr-linha' }, [el('span', { class: 'ferr-rot', text: 'Cores:' }), cores]),
+        el('div', { class: 'ferr-linha' }, [el('span', { class: 'ferr-rot', text: 'Linhas:' }), menos, nLinhas, mais, avisoLinhas]),
+        el('p', { class: 'nota', style: 'margin:0', text: 'Para colorir: clique num bloco, escolha se a cor vai no bloco, na linha inteira ou no dia inteiro, e clique na cor.' })
+      ]));
+
+      var grade = el('div', { class: 'rotina-rolagem' });
+      raiz.appendChild(grade);
+      var erro = el('p', { class: 'erro', role: 'alert', text: '' });
+      var salvar = el('button', { class: 'botao peq', type: 'button', text: 'Salvar rotina' });
+      var cancelar = el('button', { class: 'mini', type: 'button', text: 'Cancelar' });
+      var status = el('span', { class: 'nota', style: 'margin:0' });
+      var acoes = el('div', { class: 'acoes-form' }, [salvar, cancelar, status]);
+      raiz.appendChild(erro);
+      raiz.appendChild(acoes);
+
+      function mudou() {
+        if (!rotinaSuja) { rotinaSuja = true; window.onbeforeunload = function () { return 'Alterações não salvas'; }; }
+        status.textContent = 'Alterações não salvas';
+      }
+      function ajustarAltura(t) { t.style.height = 'auto'; t.style.height = Math.max(44, t.scrollHeight + 2) + 'px'; }
+      function marcarSel() {
+        Array.prototype.forEach.call(grade.querySelectorAll('td.sel'), function (x) { x.classList.remove('sel'); });
+        var td = grade.querySelector('td[data-i="' + sel.i + '"][data-j="' + sel.j + '"]');
+        if (td) td.classList.add('sel');
+      }
+      function aplicarCor() {
+        if (sel.i >= L.length) sel.i = L.length - 1;
+        for (var i = 0; i < L.length; i++) for (var j = 0; j < NOMES_DIAS.length; j++) {
+          var vai = alvo === 'celula' ? (i === sel.i && j === sel.j) : alvo === 'linha' ? i === sel.i : j === sel.j;
+          if (vai) C[i][j] = corAtual;
+        }
+        mudou(); desenharGrade();
+      }
+      function moverLinha(i, d) {
+        var k = i + d; if (k < 0 || k >= L.length) return;
+        var t = L[i]; L[i] = L[k]; L[k] = t; t = C[i]; C[i] = C[k]; C[k] = t;
+        if (sel.i === i) sel.i = k; mudou(); desenharGrade();
+      }
+      function desenharGrade() {
+        nLinhas.textContent = String(L.length);
+        menos.disabled = L.length <= 1; mais.disabled = L.length >= (r.maxLinhas || 30);
+        var tab = el('table', { class: 'rotina editando' }), cab = el('tr');
+        NOMES_DIAS.forEach(function (d) { cab.appendChild(el('th', { scope: 'col', text: d })); });
+        cab.appendChild(el('th', { class: 'ferr-col', 'aria-label': 'Linha' }));
+        tab.appendChild(el('thead', {}, [cab]));
+        var corpo = el('tbody');
+        L.forEach(function (l, i) {
+          var tr = el('tr');
+          l.forEach(function (t, j) {
+            var ta = el('textarea', { rows: '2', maxlength: String(r.maxTexto || 300), 'aria-label': NOMES_DIAS[j] + ', linha ' + (i + 1) });
+            ta.value = t;
+            pintar(ta, C[i][j]);
+            ta.onfocus = function () { sel = { i: i, j: j }; marcarSel(); };
+            ta.oninput = function () { L[i][j] = ta.value; ajustarAltura(ta); mudou(); };
+            var td = el('td', { 'data-i': String(i), 'data-j': String(j) }, [ta]);
+            pintar(td, C[i][j]);
+            tr.appendChild(td);
+          });
+          var sobe = el('button', { class: 'mini', type: 'button', title: 'Subir a linha', 'aria-label': 'Subir a linha ' + (i + 1), text: '↑' });
+          var desce = el('button', { class: 'mini', type: 'button', title: 'Descer a linha', 'aria-label': 'Descer a linha ' + (i + 1), text: '↓' });
+          var insere = el('button', { class: 'mini', type: 'button', title: 'Inserir uma linha abaixo', 'aria-label': 'Inserir uma linha abaixo da linha ' + (i + 1), text: '+' });
+          var tira = el('button', { class: 'mini', type: 'button', title: 'Apagar a linha', 'aria-label': 'Apagar a linha ' + (i + 1), text: '✕' });
+          sobe.disabled = i === 0; desce.disabled = i === L.length - 1;
+          insere.disabled = L.length >= (r.maxLinhas || 30); tira.disabled = L.length <= 1;
+          sobe.onclick = function () { moverLinha(i, -1); };
+          desce.onclick = function () { moverLinha(i, 1); };
+          insere.onclick = function () { L.splice(i + 1, 0, linhaVazia()); C.splice(i + 1, 0, linhaVazia()); mudou(); desenharGrade(); };
+          tira.onclick = function () {
+            if (temTexto(L[i]) && !tira.classList.contains('perigo')) { tira.classList.add('perigo'); tira.textContent = 'Apagar?'; return; }
+            L.splice(i, 1); C.splice(i, 1); if (sel.i >= L.length) sel.i = L.length - 1; mudou(); desenharGrade();
+          };
+          tr.appendChild(el('td', { class: 'ferr-col' }, [el('div', { class: 'ferr-btns' }, [sobe, desce, insere, tira])]));
+          corpo.appendChild(tr);
+        });
+        tab.appendChild(corpo);
+        grade.innerHTML = '';
+        grade.appendChild(tab);
+        Array.prototype.forEach.call(grade.querySelectorAll('textarea'), ajustarAltura);
+        marcarSel();
+      }
+      desenharGrade();
+
+      cancelar.onclick = function () {
+        if (!rotinaSuja) { ver(r); return; }
+        confirmarInline(acoes, 'Descartar as alterações?', 'Descartar', function () { ver(r); });
+      };
+      salvar.onclick = function () {
+        erro.textContent = '';
+        salvar.disabled = true; salvar.textContent = 'Salvando…';
+        c.api('salvarRotina', { id: c.id, linhas: L, cores: C, versao: r.versao }).then(function (x) {
+          salvar.disabled = false; salvar.textContent = 'Salvar rotina';
+          if (x && x.ok) {
+            r.linhas = x.linhas; r.cores = x.cores; r.versao = x.versao; r.antiga = false;
+            c.aviso(x.mudou ? 'Rotina salva. O aluno já vê a nova versão.' : 'Nada mudou na rotina.');
+            ver(r); return;
+          }
+          erro.textContent = msgErro(x);
+          if (x && x.erro === 'mudou') {
+            var rec = el('button', { class: 'mini', type: 'button', text: 'Recarregar a rotina' });
+            rec.onclick = function () { rotinaSuja = false; window.onbeforeunload = null; rotina(raiz, c); };
+            erro.appendChild(el('br')); erro.appendChild(rec);
+          }
+        }).catch(function (e) { salvar.disabled = false; salvar.textContent = 'Salvar rotina'; if (e.message !== 'sessao') erro.textContent = 'Sem conexão. Suas alterações continuam aqui: tente salvar de novo.'; });
+      };
+    }
+  }
+
+  return { simulados: simulados, caderno: caderno, rotina: rotina, podeSair: podeSair };
 })();

@@ -1,10 +1,13 @@
-// Testa as caixas do aluno (Meu painel · Simulados · Caderno de erros) e as abas do mentor, com um servidor simulado que guarda estado.
+// Testa as caixas do aluno (Meu painel · Simulados · Caderno de erros · Rotina) e as abas do mentor, com um servidor simulado que guarda estado.
 // Rodar: node testes/teste_registros.js
 const {chromium}=require('playwright');
 const SITE='file://'+require('path').resolve(__dirname,'..','index.html');
 function novoServidor(){
   const st={lanc:[{id:'',origem:'formulario',prova:'SAS 1 2024',chave:'sas12024',dia:1,data:'01/10/2026',dataIso:'2026-10-01',L:30,H:28,N:null,M:null,C:[160,160,140,160,120],quando:1}],
-    erros:[{linha:3,simulado:'SAS 1 2024',materia:'Química',parte:'Estequiometria',motivo:'Erro de cálculo'}],seq:1,log:[]};
+    erros:[{linha:3,simulado:'SAS 1 2024',materia:'Química',parte:'Estequiometria',motivo:'Erro de cálculo',questao:''}],seq:1,log:[],
+    rot:{linhas:[['8h - 10h','8h - 10h\nSimulado dia 1','8h - 10h\nSimulado dia 1','8h - 10h\nSimulado dia 1','8h - 10h\nSimulado dia 1','8h - 12h','8h - 12h'],
+      ['Treina 16h','Treina 16h','Treina 16h','Treina 16h','Treina 16h','Seja feliz','Seja feliz']],
+      cores:[['','','','','','#00ff00','#4a86e8'],['#ff0000','#ff0000','#ff0000','#ff0000','#ff0000','#00ff00','#4a86e8']],versao:'v1'}};
   const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'');
   const dados=()=>({aluno:'Aluna Exemplo',primeiro:'Aluna',curso:'Medicina',desde:'out de 2026',mentor:'Mentor Exemplo',simulados:[{prova:'SAS 1 2024',data:'01/10/2026',ordem:1,L:30,H:28,N:null,M:null,R:740}],erros:st.erros});
   return {st, resp(req,papel){
@@ -12,8 +15,8 @@ function novoServidor(){
     switch(req.acao){
       case 'config': return {ok:true,aceitaCodigo:true,google:false};
       case 'entrar': return {ok:true,sessao:'S',quem:{nome:papel==='mentor'?'Mentor Exemplo':'Aluna Exemplo',via:'codigo',aluno:papel==='aluno',mentor:papel==='mentor'}};
-      case 'inicio': return papel==='aluno'?{ok:true,papel:'aluno',quem:{nome:'Aluna Exemplo',via:'codigo',aluno:true},fases:{lancamentos:true,caderno:true,diagnostico:true},atualizado:'31/10/2026',dados:dados()}
-        :{ok:true,papel:'mentor',quem:{nome:'Mentor Exemplo',via:'codigo',mentor:true},fases:{lancamentos:true,caderno:true,diagnostico:true},atualizado:'31/10/2026',alunos:[{id:'A1',aluno:'Aluna Exemplo',mentor:'Mentor Exemplo',nSims:1}],mentores:[],meuMentor:'Mentor Exemplo'};
+      case 'inicio': return papel==='aluno'?{ok:true,papel:'aluno',quem:{nome:'Aluna Exemplo',via:'codigo',aluno:true},fases:{lancamentos:true,caderno:true,diagnostico:true,rotina:true},atualizado:'31/10/2026',dados:dados()}
+        :{ok:true,papel:'mentor',quem:{nome:'Mentor Exemplo',via:'codigo',mentor:true},fases:{lancamentos:true,caderno:true,diagnostico:true,rotina:true},atualizado:'31/10/2026',alunos:[{id:'A1',aluno:'Aluna Exemplo',mentor:'Mentor Exemplo',nSims:1}],mentores:[],meuMentor:'Mentor Exemplo'};
       case 'aluno': return {ok:true,aluno:Object.assign({id:'A1',codigo:'AB12-CD34',diagnostico:{'Prontidão (0–100)':'60'}},dados())};
       case 'simulados': return {ok:true,catalogo:[{nome:'SAS 1 2024',chave:'sas12024',alunos:3,ultimo:1},{nome:'Bernoulli 2 2025',chave:'bernoulli22025',alunos:2,ultimo:0}],lancamentos:st.lanc.slice().sort((a,b)=>b.quando-a.quando)};
       case 'salvarSimulado':{
@@ -28,6 +31,11 @@ function novoServidor(){
       case 'editarErro': { const e=st.erros.find(x=>x.linha===req.linha); if(e.parte!==req.antes.parte) return {ok:false,erro:'mudou',msg:'mudou'}; Object.assign(e,req.depois); return {ok:true}; }
       case 'excluirErro': st.erros=st.erros.filter(x=>x.linha!==req.linha); return {ok:true};
       case 'atualizar': return {ok:true,dados:dados(),atualizado:'31/10/2026 01:30'};
+      case 'rotina': return {ok:true,dias:['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'],linhas:st.rot.linhas,cores:st.rot.cores,antiga:false,versao:st.rot.versao,podeEditar:papel==='mentor',maxLinhas:30,padrao:8,maxTexto:300};
+      case 'salvarRotina':{
+        if(papel!=='mentor') return {ok:false,erro:'proibido'};
+        if(req.versao!==st.rot.versao) return {ok:false,erro:'mudou',msg:'A rotina foi alterada (na planilha ou por outra pessoa) enquanto você editava. Recarregue para ver a versão atual.'};
+        st.rot={linhas:req.linhas,cores:req.cores,versao:'v'+(++st.seq)};return {ok:true,mudou:1,linhas:st.rot.linhas,cores:st.rot.cores,versao:st.rot.versao};}
     } return {ok:true};
   }};
 }
@@ -39,7 +47,9 @@ function novoServidor(){
   await p.addInitScript(()=>{try{localStorage.clear()}catch(e){}});
   await p.goto(SITE);await p.waitForTimeout(300);
   await p.fill('input[aria-label="Código de acesso"]','ABCD-EFGH');await p.click('text=Entrar com o código');await p.waitForTimeout(600);
-  ok((await p.$$('.caixa')).length===3,'aluno vê as 3 caixas');
+  ok((await p.$$('.caixa')).length===4,'aluno vê as 4 caixas');
+  ok((await p.textContent('.grade4')).includes('Química – Estequiometria'),'cartão de erros mostra Matéria – Tema');
+  ok((await p.$$eval('.sec',x=>x.map(y=>y.textContent))).includes('Temas com mais erros')&&!(await p.content()).includes('Por que você erra'),'"Por que você erra" virou "Temas com mais erros"');
   ok((await p.textContent('.caixa[aria-pressed="true"]')).includes('Meu painel'),'começa em Meu painel');
   ok(!!(await p.$('.grade4')),'painel com os cartões dentro da caixa');
   await p.screenshot({path:__dirname+'/aluno_caixas.png'});
@@ -89,24 +99,43 @@ function novoServidor(){
   ok((await p.textContent('.reg-titulo'))==='Caderno de erros','abre o Caderno de erros');
   ok((await p.inputValue('select[aria-label="Simulado"]'))==='Bernoulli 2 2025','já sugere o simulado mais recente');
   await p.selectOption('select[aria-label="Matéria"]','Química');
-  ok((await p.$$eval('#partes-sugestoes option',o=>o.map(x=>x.value))).includes('Estequiometria'),'sugere partes já usadas na matéria');
+  ok((await p.$$eval('#partes-sugestoes option',o=>o.map(x=>x.value))).includes('Estequiometria'),'sugere temas já usados na matéria');
   await p.click('text=+ Adicionar à lista');await p.waitForTimeout(100);
-  ok((await p.textContent('.form-reg .erro')).includes('parte da matéria'),'exige a parte da matéria');
-  await p.fill('input[aria-label="Parte da matéria"]','Equilíbrio químico');await p.selectOption('select[aria-label="Motivo do erro"]','Não sabia o conteúdo');
-  await p.press('input[aria-label="Parte da matéria"]','Enter');await p.waitForTimeout(100);
-  await p.selectOption('select[aria-label="Matéria"]','Física');await p.fill('input[aria-label="Parte da matéria"]','Cinemática');await p.selectOption('select[aria-label="Motivo do erro"]','Falta de atenção');
+  ok((await p.textContent('.form-reg .erro')).includes('tema'),'exige o tema');
+  await p.fill('input[aria-label="Tema"]','Equilíbrio químico');await p.selectOption('select[aria-label="Motivo do erro"]','Não sabia o conteúdo');
+  await p.press('input[aria-label="Número da questão"]','Enter');await p.waitForTimeout(100);
+  ok((await p.textContent('.form-reg .erro')).includes('número da questão'),'exige o número da questão');
+  await p.fill('input[aria-label="Número da questão"]','12a');await p.press('input[aria-label="Número da questão"]','Enter');await p.waitForTimeout(100);
+  ok((await p.textContent('.form-reg .erro')).includes('número da questão'),'recusa número inválido');
+  await p.fill('input[aria-label="Número da questão"]','112');await p.press('input[aria-label="Número da questão"]','Enter');await p.waitForTimeout(100);
+  await p.selectOption('select[aria-label="Matéria"]','Física');await p.fill('input[aria-label="Tema"]','Cinemática');await p.selectOption('select[aria-label="Motivo do erro"]','Falta de atenção');
+  await p.fill('input[aria-label="Número da questão"]','112');await p.click('text=+ Adicionar à lista');await p.waitForTimeout(100);
+  ok((await p.textContent('.form-reg .erro')).includes('já está no caderno'),'avisa questão repetida no mesmo simulado');
+  await p.fill('input[aria-label="Número da questão"]','98');
   await p.click('text=+ Adicionar à lista');await p.waitForTimeout(100);
   ok((await p.$$('.item-erro.pend')).length===2,'dois erros na lista antes de salvar');
   ok((await p.textContent('.form-reg .botao')).includes('Salvar 2 erros'),'botão mostra quantos vão ser salvos');
   await p.screenshot({path:__dirname+'/aluno_caderno.png',fullPage:true});
   await p.click('.form-reg .botao');await p.waitForTimeout(600);
-  ok(srv.st.erros.length===3&&srv.st.erros.some(e=>e.parte==='Cinemática'&&e.simulado==='Bernoulli 2 2025'),'erros salvos com o simulado escolhido');
+  ok(srv.st.erros.length===3&&srv.st.erros.some(e=>e.parte==='Cinemática'&&e.simulado==='Bernoulli 2 2025'&&e.questao==='98'),'erros salvos com o simulado e o número da questão');
+  ok(JSON.stringify(await p.$$eval('.card:has-text("Bernoulli 2 2025") .q-num',x=>x.map(y=>y.textContent)))==='["Q98","Q112"]','erros do simulado em ordem de questão');
   await p.click('.item-erro:has-text("Cinemática") button:has-text("Editar")');await p.waitForTimeout(100);
-  await p.fill('.editando input[aria-label="Parte da matéria"]','Dinâmica');await p.click('.editando button:has-text("Salvar")');await p.waitForTimeout(500);
+  ok(await p.inputValue('.editando input[aria-label="Número da questão"]')==='98','edição traz o número da questão');
+  await p.fill('.editando input[aria-label="Tema"]','Dinâmica');await p.click('.editando button:has-text("Salvar")');await p.waitForTimeout(500);
   ok(srv.st.erros.some(e=>e.parte==='Dinâmica'),'editou um erro');
   await p.click('.item-erro:has-text("Dinâmica") button:has-text("Excluir")');await p.click('.mini.perigo');await p.waitForTimeout(500);
   ok(!srv.st.erros.some(e=>e.parte==='Dinâmica'),'excluiu um erro');
-  await p.setViewportSize({width:390,height:900});await p.click('.caixa:has-text("Meu painel")');await p.waitForTimeout(300);
+  // ---------- Rotina (aluno só vê) ----------
+  await p.click('.caixa:has-text("Rotina")');await p.waitForTimeout(400);
+  ok((await p.textContent('.reg-titulo'))==='Minha rotina','abre a Rotina');
+  ok((await p.$$('table.rotina th')).length===7&&(await p.$$('table.rotina tbody tr')).length===2,'tabela com 7 dias e as linhas do mentor');
+  ok(await p.$eval('table.rotina tbody tr:nth-child(2) td:nth-child(1)',x=>getComputedStyle(x).backgroundColor)==='rgb(255, 0, 0)','cores da rotina aparecem');
+  ok(!(await p.$('text=Editar rotina')),'aluno não tem botão de editar');
+  ok(!!(await p.$('.hoje-card')),'mostra o bloco de hoje');
+  await p.screenshot({path:__dirname+'/aluno_rotina.png',fullPage:true});
+  await p.setViewportSize({width:390,height:900});await p.waitForTimeout(200);
+  await p.screenshot({path:__dirname+'/aluno_rotina_celular.png',fullPage:true});
+  await p.click('.caixa:has-text("Meu painel")');await p.waitForTimeout(300);
   await p.screenshot({path:__dirname+'/aluno_celular.png'});
   ok(erros.length===0,'aluno: sem erros de JavaScript '+erros.join(';'));await p.close();}
  // ---------- Mentor ----------
@@ -117,12 +146,47 @@ function novoServidor(){
   await p.goto(SITE);await p.waitForTimeout(300);
   await p.fill('input[aria-label="Código de acesso"]','ABCD-EFGH');await p.click('text=Entrar com o código');await p.waitForTimeout(700);
   const abas=await p.$$eval('.aba',a=>a.map(x=>x.textContent));
-  ok(JSON.stringify(abas)===JSON.stringify(['Painel','Simulados','Caderno de erros','Diagnóstico']),'mentor tem Painel, Simulados, Caderno e Diagnóstico');
+  ok(JSON.stringify(abas)===JSON.stringify(['Painel','Simulados','Caderno de erros','Rotina','Diagnóstico']),'mentor tem Painel, Simulados, Caderno, Rotina e Diagnóstico');
   await p.click('.aba:has-text("Simulados")');await p.waitForTimeout(400);
   ok((await p.textContent('.reg-titulo'))==='Simulados lançados','mentor vê os simulados do aluno');
   await p.click('.aba:has-text("Caderno")');await p.waitForTimeout(400);
   ok((await p.$$('.item-erro')).length>=1,'mentor vê o caderno do aluno');
   ok(srv.st.log.filter(a=>a==='caderno').length===1,'chamou o caderno do aluno');
   await p.screenshot({path:__dirname+'/mentor_caderno.png',fullPage:true});
+  // ---------- Rotina (mentor edita) ----------
+  await p.click('.aba:has-text("Rotina")');await p.waitForTimeout(400);
+  ok((await p.textContent('.reg-titulo'))==='Rotina do aluno','mentor abre a rotina');
+  await p.click('text=Editar rotina');await p.waitForTimeout(200);
+  ok((await p.$$('table.rotina.editando textarea')).length===14,'editor com 2 linhas × 7 dias');
+  await p.click('.ferramentas button[aria-label="Acrescentar uma linha no fim"]');await p.waitForTimeout(100);
+  ok((await p.textContent('.n-linhas'))==='3','acrescenta linha');
+  await p.fill('textarea[aria-label="Segunda, linha 3"]','13h-15:30\nCaderno de erros');
+  await p.click('.seg button:has-text("Linha inteira")');
+  await p.click('.sw-cor[aria-label="Pintar de amarelo claro"]');await p.waitForTimeout(100);
+  ok(await p.$eval('td[data-i="2"][data-j="6"]',x=>getComputedStyle(x).backgroundColor)==='rgb(255, 242, 204)','pinta a linha inteira');
+  await p.click('textarea[aria-label="Domingo, linha 1"]');await p.click('.seg button:has-text("Dia inteiro")');await p.click('.sw-cor[aria-label="Pintar de azul-marinho"]');await p.waitForTimeout(100);
+  ok(await p.$eval('textarea[aria-label="Domingo, linha 2"]',x=>getComputedStyle(x).color)==='rgb(255, 255, 255)','dia inteiro pintado, com texto branco no fundo escuro');
+  // apagar linha com texto pede confirmação no próprio botão
+  await p.click('button[aria-label="Apagar a linha 3"]');
+  ok((await p.textContent('button.perigo'))==='Apagar?','pede confirmação para apagar linha com texto');
+  await p.click('button[aria-label="Descer a linha 1"]');await p.waitForTimeout(100);
+  ok((await p.inputValue('textarea[aria-label="Segunda, linha 2"]'))==='8h - 10h','move a linha para baixo');
+  ok((await p.textContent('.acoes-form')).includes('Alterações não salvas'),'avisa alterações não salvas');
+  await p.screenshot({path:__dirname+'/mentor_rotina_editando.png',fullPage:true});
+  // trocar de aba com alterações pendentes pergunta antes
+  let perguntou=false;p.once('dialog',d=>{perguntou=true;d.dismiss();});
+  await p.click('.aba:has-text("Painel")');await p.waitForTimeout(200);
+  ok(perguntou&&!!(await p.$('table.rotina.editando')),'pergunta antes de sair sem salvar e fica no editor');
+  await p.click('text=Salvar rotina');await p.waitForTimeout(500);
+  ok(srv.st.rot.linhas.length===3&&srv.st.rot.linhas[2][0]==='13h-15:30\nCaderno de erros'&&srv.st.rot.cores[2][3]==='#fff2cc'&&srv.st.rot.cores[0][6]==='#0b2545','salvou texto, linhas e cores');
+  ok(!!(await p.$('table.rotina:not(.editando)')),'volta para a visualização');
+  // conflito: alguém mudou a planilha no meio
+  await p.click('text=Editar rotina');await p.waitForTimeout(200);
+  srv.st.rot.versao='mexeram';
+  await p.fill('textarea[aria-label="Terça, linha 1"]','x');await p.click('text=Salvar rotina');await p.waitForTimeout(400);
+  ok((await p.textContent('.erro')).includes('Recarregue')&&!!(await p.$('text=Recarregar a rotina')),'conflito avisa e oferece recarregar');
+  p.once('dialog',d=>d.accept());
+  await p.click('.aba:has-text("Painel")');await p.waitForTimeout(300);
+  ok(!!(await p.$('.grade4')),'confirmando, sai do editor');
   ok(erros.length===0,'mentor: sem erros de JavaScript '+erros.join(';'));await p.close();}
  await b.close();console.log(falhas?falhas+' falha(s)':'TUDO OK');process.exit(falhas?1:0);})();
