@@ -265,6 +265,9 @@
   .rev-etapas i.feita { background: var(--bom); }
   .rev-etapas i.atual { background: #fff; box-shadow: inset 0 0 0 2px var(--acento); }
   .rev-btns { display: flex; gap: 6px; }
+  .grifo { display: inline-block; margin-left: 8px; font-size: 11.5px; font-weight: 600; color: #16202E; padding: 0 3px; vertical-align: 1px;
+    background: linear-gradient(104deg, transparent 2%, #CFE2FF 3%, #CFE2FF 96%, transparent 97%) 0 62% / 100% 58% no-repeat; }
+  .rev-topo { padding-bottom: 2px; }
   .nivel { font: inherit; font-size: 13px; font-weight: 700; padding: 7px 13px; border-radius: 9px; cursor: pointer; border: 1px solid; transition: filter .15s; }
   .nivel:hover { filter: brightness(.96); }
   .nivel:disabled { opacity: .55; cursor: default; }

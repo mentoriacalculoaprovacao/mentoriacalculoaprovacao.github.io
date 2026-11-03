@@ -83,6 +83,11 @@ function novoServidor(){
   ok(srv.st.revs.length===1&&srv.st.revs[0].resultado==='medio','marca a revisão no servidor');
   ok((await p.textContent('.toast')).includes('Próxima revisão em 10 dias (qui 12/11)'),'avisa a próxima revisão (10 dias depois)');
   ok((await p.textContent('.rev')).includes('Tudo em dia'),'tema revisado sai da lista de hoje');
+  ok((await p.textContent('.rev-linha .grifo'))==='Pode adiantar'&&(await p.textContent('.rev-linha small')).startsWith('qui 12/11'),'mostra a próxima revisão com "Pode adiantar"');
+  ok(await p.$eval('.grifo',e=>getComputedStyle(e).color)==='rgb(22, 32, 46)','"Pode adiantar" em preto com grifo azul');
+  await p.click('.rev-linha button.nivel.facil');await p.waitForTimeout(300);
+  ok(srv.st.revs.length===2&&srv.st.revs[1].resultado==='facil','adiantar registra a revisão hoje');
+  ok((await p.textContent('.toast')).includes('Revisão adiantada. Próxima revisão em 16 dias'),'recalcula a partir de hoje (10 × 1,6 = 16 dias) '+(await p.textContent('.toast')));
   await p.screenshot({path:__dirname+'/aluno_revisao_ok.png',clip:{x:0,y:250,width:1100,height:200}});
   ok(!!(await p.$('.grade4')),'painel com os cartões dentro da caixa');
   await p.screenshot({path:__dirname+'/aluno_caixas.png'});
