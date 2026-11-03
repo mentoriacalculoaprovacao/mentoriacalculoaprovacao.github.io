@@ -698,70 +698,62 @@ window.Registros = (function () {
     return ordem.map(function (s) { return (por[s].length === 1 ? 'a questão ' : 'as questões ') + por[s].join(', ') + ' do ' + s; }).join(' e ');
   }
 
-  // Cartão do painel: o que revisar hoje (aluno marca; mentor e gestor só veem)
+  // Revisão no painel: só os temas do dia, em linhas simples (aluno marca; mentor e gestor só veem)
   function revisao(lugar, c) {
     lugar.innerHTML = '';
-    var card = el('div', { class: 'card rev-card' }, [el('p', { class: 'carregando', style: 'margin:0', text: 'Montando sua revisão…' })]);
-    lugar.appendChild(card);
+    var titulo = el('div', { class: 'sec', text: c.mentor ? 'Revisões do aluno' : 'Revisão de hoje' });
+    var card = el('div', { class: 'card rev' }, [el('p', { class: 'rev-vazio', text: 'Carregando…' })]);
+    lugar.appendChild(el('div', { class: 'rev-bloco' }, [titulo, card]));
     c.api('revisoes', { id: c.id }).then(function (r) {
-      if (!r || !r.ok) { if (r && r.erro === 'faseDesligada') lugar.innerHTML = ''; else card.innerHTML = ''; return; }
+      if (!r || !r.ok) { lugar.innerHTML = ''; return; }
       desenhar(r);
     }).catch(function () { lugar.innerHTML = ''; });
 
     function desenhar(r) {
-      var itens = agenda(r.erros, r.revisoes, r.hoje);
+      var itens = agenda(r.erros, r.revisoes, r.hoje), H = diaN(r.hoje);
       var hoje = itens.filter(function (x) { return x.situacao === 'hoje'; }).sort(function (a, b) { return b.prioridade - a.prioridade; });
-      var H = diaN(r.hoje);
-      var proximos = itens.filter(function (x) { return x.situacao === 'agendado' && diaN(x.proxima) - H <= 7; }).sort(function (a, b) { return diaN(a.proxima) - diaN(b.proxima); });
-      var consol = itens.filter(function (x) { return x.situacao === 'consolidado'; }).length;
+      var prox = itens.filter(function (x) { return x.situacao === 'agendado'; }).sort(function (a, b) { return diaN(a.proxima) - diaN(b.proxima); })[0];
       card.innerHTML = '';
-      card.appendChild(el('div', { class: 'rev-cab' }, [el('div', {}, [el('h3', { text: c.mentor ? 'Revisões do aluno' : 'Revisão de hoje' }),
-        el('p', { class: 'nota', style: 'margin:2px 0 0', text: 'Pela curva do esquecimento: cada tema do caderno volta 7 dias depois do erro e, a cada revisão boa, o intervalo cresce 1,4 vez (até 30 dias).' })]),
-        itens.length ? el('span', { class: 'rev-resumo', text: itens.length + (itens.length === 1 ? ' tema' : ' temas') + ' na agenda' + (consol ? ' · ' + consol + ' consolidado' + (consol === 1 ? '' : 's') : '') }) : null]));
-      if (!itens.length) { card.appendChild(el('p', { class: 'vazio', style: 'margin:6px 0 0', text: c.mentor ? 'O aluno ainda não registrou erros com tema no caderno.' : 'Registre os erros dos seus simulados no caderno: a agenda de revisão sai deles.' })); return; }
-      if (!hoje.length) {
-        var p0 = proximos[0] || itens.filter(function (x) { return x.situacao === 'agendado'; }).sort(function (a, b) { return diaN(a.proxima) - diaN(b.proxima); })[0];
-        card.appendChild(el('p', { class: 'rev-msg ok', text: (c.mentor ? 'Nenhuma revisão pendente hoje.' : 'Tudo em dia! Nada para revisar hoje.') + (p0 ? ' Próxima: ' + p0.rotulo + ' em ' + dataCurta(p0.proxima) + '.' : '') }));
-      } else {
-        var t = hoje[0];
-        var q = textoQuestoes(t.questoes);
-        card.appendChild(el('p', { class: 'rev-msg' }, [c.mentor ? 'Prioridade do aluno hoje: ' : 'Hoje, comece por ', el('b', { text: t.rotulo }),
-          ': ' + t.nErros + (t.nErros === 1 ? ' erro' : ' erros') + ' no caderno' + (t.atraso > 0 ? ' e ' + t.atraso + (t.atraso === 1 ? ' dia' : ' dias') + ' de atraso na revisão' : '') + '. ' +
-          (c.mentor ? '' : 'Revise a teoria' + (q ? ', refaça ' + q : '') + ' e resolva questões novas do mesmo tema.')]));
-        var lista = el('div', { class: 'rev-lista' });
-        hoje.slice(0, 5).forEach(function (x) { lista.appendChild(itemRev(x)); });
-        card.appendChild(lista);
-        if (hoje.length > 5) {
-          var mais = el('div', { class: 'rev-lista' }); hoje.slice(5).forEach(function (x) { mais.appendChild(itemRev(x)); });
-          card.appendChild(el('details', { class: 'rev-mais' }, [el('summary', { text: 'Mais ' + (hoje.length - 5) + (hoje.length - 5 === 1 ? ' tema' : ' temas') + ' para revisar' }), mais]));
-        }
+      if (!itens.length) {
+        card.appendChild(el('p', { class: 'rev-vazio', text: c.mentor ? 'Sem erros com tema no caderno ainda.' : 'Registre seus erros no caderno: a revisão sai deles.' }));
+        return;
       }
-      if (proximos.length) card.appendChild(el('div', { class: 'rev-prox' }, [el('span', { class: 'nota', style: 'margin:0', text: 'Próximos 7 dias:' })].concat(
-        proximos.slice(0, 8).map(function (x) { return el('span', { class: 'tag', text: dataCurta(x.proxima) + ' · ' + x.rotulo }); }))));
+      if (!hoje.length) {
+        card.appendChild(el('p', { class: 'rev-vazio ok' }, [el('span', { class: 'rev-check', text: '✓' }), 'Tudo em dia' + (prox ? ' · próxima ' + dataCurta(prox.proxima) : '')]));
+        return;
+      }
+      var lista = el('div', { class: 'rev-linhas' });
+      hoje.forEach(function (x, i) { var l = linha(x, i === 0); if (i >= 3) l.classList.add('oculto'); lista.appendChild(l); });
+      card.appendChild(lista);
+      if (hoje.length > 3) {
+        var mais = el('button', { class: 'rev-mais', type: 'button', text: '+ ' + (hoje.length - 3) + (hoje.length - 3 === 1 ? ' tema' : ' temas') });
+        mais.onclick = function () { Array.prototype.forEach.call(lista.querySelectorAll('.oculto'), function (n) { n.classList.remove('oculto'); }); mais.remove(); };
+        card.appendChild(mais);
+      }
 
-      function itemRev(x) {
-        var info = x.nErros + (x.nErros === 1 ? ' erro' : ' erros') + ' · revisão ' + Math.min(x.etapa + 1, ETAPAS.length) + ' de ' + ETAPAS.length + ' · ' +
-          (x.atraso > 0 ? 'atrasada ' + x.atraso + (x.atraso === 1 ? ' dia' : ' dias') : 'vence hoje');
-        var box = el('div', { class: 'rev-item' }, [el('div', { class: 'rev-item-txt' }, [el('b', { text: x.rotulo }), el('small', { text: info }),
-          x.questoes.length ? el('small', { text: 'Refazer: ' + textoQuestoes(x.questoes) }) : null])]);
+      function linha(x, primeiro) {
+        var qs = x.questoes.map(function (q) { return 'Q' + q.q; });
+        var sub = 'Teoria' + (qs.length ? ' + refazer ' + qs.slice(0, 4).join(', ') : '') + ' + questões novas' + (x.atraso > 0 ? ' · atrasada' : '');
+        var etapas = el('span', { class: 'rev-etapas', title: 'Revisão ' + Math.min(x.etapa + 1, ETAPAS.length) + ' de ' + ETAPAS.length, 'aria-label': 'Revisão ' + Math.min(x.etapa + 1, ETAPAS.length) + ' de ' + ETAPAS.length });
+        ETAPAS.forEach(function (_, k) { etapas.appendChild(el('i', { class: k < x.etapa ? 'feita' : k === x.etapa ? 'atual' : '' })); });
+        var box = el('div', { class: 'rev-linha' + (primeiro ? ' primeiro' : '') }, [
+          el('div', { class: 'rev-tema' }, [el('b', { text: x.rotulo }), el('small', { text: sub })]), etapas]);
         if (!c.mentor) {
-          var bem = el('button', { class: 'mini forte', type: 'button', text: 'Revisei: fui bem' });
-          var dif = el('button', { class: 'mini', type: 'button', text: 'Ainda tenho dificuldade' });
+          var bem = el('button', { class: 'mini forte', type: 'button', text: 'Fui bem' });
+          var dif = el('button', { class: 'mini', type: 'button', text: 'Difícil' });
           var marcar = function (res) {
             bem.disabled = dif.disabled = true;
             c.api('registrarRevisao', { id: c.id, materia: x.materia, tema: x.tema, resultado: res }).then(function (y) {
               if (!y || !y.ok) { bem.disabled = dif.disabled = false; c.aviso(msgErro(y), true); return; }
               r.revisoes.push({ materia: x.materia, tema: x.tema, resultado: res, data: y.data || r.hoje });
-              var depois = agenda(r.erros, r.revisoes, r.hoje).filter(function (z) { return z.chave === x.chave; })[0];
-              c.aviso(depois && depois.situacao === 'consolidado' ? 'Tema consolidado! ' + x.rotulo + ' sai da agenda.'
-                : res === 'bem' ? 'Boa! Próxima revisão de ' + x.rotulo + ' em ' + depois.intervalo + ' dias (' + dataCurta(depois.proxima) + ').'
-                : 'Sem problema: ' + x.rotulo + ' volta em 7 dias (' + dataCurta(depois.proxima) + '). Vale falar disso com seu mentor.');
+              var d = agenda(r.erros, r.revisoes, r.hoje).filter(function (z) { return z.chave === x.chave; })[0];
+              c.aviso(d && d.situacao === 'consolidado' ? x.rotulo + ': tema consolidado!' : 'Próxima revisão ' + dataCurta(d.proxima) + '.');
               desenhar(r);
             }).catch(function () { bem.disabled = dif.disabled = false; c.aviso('Sem conexão. Tente de novo.', true); });
           };
           bem.onclick = function () { marcar('bem'); };
           dif.onclick = function () { marcar('dificil'); };
-          box.appendChild(el('div', { class: 'acoes' }, [bem, dif]));
+          box.appendChild(el('div', { class: 'rev-btns' }, [bem, dif]));
         }
         return box;
       }

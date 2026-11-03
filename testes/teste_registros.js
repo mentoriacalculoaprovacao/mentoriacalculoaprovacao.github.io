@@ -61,7 +61,7 @@ function novoServidor(){
   ok((await p.textContent('.grade4')).includes('Química – Estequiometria'),'cartão de erros mostra Matéria – Tema');
   ok((await p.$$eval('.sec',x=>x.map(y=>y.textContent))).includes('Temas com mais erros')&&!(await p.content()).includes('Por que você erra'),'"Por que você erra" virou "Temas com mais erros"');
   ok((await p.textContent('.caixa[aria-pressed="true"]')).includes('Meu painel'),'começa em Meu painel');
-  ok((await p.textContent('.rev-card')).includes('Hoje, comece por')&&(await p.textContent('.rev-card')).includes('Química – Estequiometria'),'revisão de hoje no painel, com o tema vencido');
+  ok((await p.textContent('.rev-linha.primeiro')).includes('Química – Estequiometria')&&(await p.$$('.rev-etapas i')).length===6,'revisão de hoje no painel, com o tema vencido e as 6 etapas');
   // ---------- regras da agenda (7 dias × 1,4 até 30) ----------
   const ag=await p.evaluate(()=>{const A=window.Registros.agenda,E=[{materia:'Física',tema:'Óptica',data:'2026-10-01',questao:'101',simulado:'S'}];
     const seq=[],revs=[];let hoje='2026-10-08';
@@ -73,10 +73,12 @@ function novoServidor(){
   ok(ag.seq.map(s=>s.split(':').slice(1).join(':')).join(' ')==='7:2026-10-08 10:2026-10-18 14:2026-11-01 19:2026-11-20 27:2026-12-17 30:2027-01-16 30:-'&&ag.seq[6].indexOf('consolidado')===0,'cada revisão boa multiplica por 1,4; teto de 30; depois consolida '+ag.seq.join(' | '));
   ok(ag.dif==='2026-10-15','"ainda tenho dificuldade" volta para 7 dias');
   ok(ag.novo[0]==='2026-10-19'&&ag.novo[1]===2,'erro novo no tema (grafia diferente) recomeça em 7 dias');
-  await p.click('.rev-item button:has-text("Revisei: fui bem")');await p.waitForTimeout(300);
+  await p.screenshot({path:__dirname+'/aluno_revisao.png',clip:{x:0,y:250,width:1100,height:260}});
+  await p.click('.rev-linha button:has-text("Fui bem")');await p.waitForTimeout(300);
   ok(srv.st.revs.length===1&&srv.st.revs[0].resultado==='bem','marca a revisão no servidor');
-  ok((await p.textContent('.toast')).includes('Próxima revisão')&&(await p.textContent('.toast')).includes('10 dias'),'avisa a próxima revisão (10 dias)');
-  ok((await p.textContent('.rev-card')).includes('Tudo em dia'),'tema revisado sai da lista de hoje');
+  ok((await p.textContent('.toast')).includes('Próxima revisão qui 12/11'),'avisa a próxima revisão (10 dias depois)');
+  ok((await p.textContent('.rev')).includes('Tudo em dia'),'tema revisado sai da lista de hoje');
+  await p.screenshot({path:__dirname+'/aluno_revisao_ok.png',clip:{x:0,y:250,width:1100,height:200}});
   ok(!!(await p.$('.grade4')),'painel com os cartões dentro da caixa');
   await p.screenshot({path:__dirname+'/aluno_caixas.png'});
   await p.click('.caixa:has-text("Simulados")');await p.waitForTimeout(400);

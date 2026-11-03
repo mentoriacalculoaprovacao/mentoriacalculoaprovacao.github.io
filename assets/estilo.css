@@ -247,19 +247,26 @@
   @media (max-width: 520px) { .ferramentas { position: static; } .sw-cor { width: 32px; height: 32px; } }
 
   /* ---------- Revisão espaçada, simulados em PDF e erros que faltam ---------- */
-  .rev-card { display: grid; gap: 12px; border: 1.5px solid #C9D6EA; }
-  .rev-cab { display: flex; gap: 8px 14px; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; }
-  .rev-cab h3 { margin: 0; font-size: 18px; text-transform: none; letter-spacing: 0; color: var(--texto); }
-  .rev-resumo { font-size: 12.5px; color: var(--suave); white-space: nowrap; }
-  .rev-msg { margin: 0; font-size: 15px; line-height: 1.45; padding: 10px 12px; border-radius: 10px; background: #EEF3FA; border-left: 4px solid var(--azul); }
-  .rev-msg.ok { background: #EAF6EF; border-left-color: var(--bom); }
-  .rev-lista { display: grid; gap: 8px; }
-  .rev-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--linha); }
-  .rev-item-txt { display: grid; gap: 2px; min-width: 0; }
-  .rev-item-txt small { color: var(--suave); font-size: 12.5px; }
-  @media (max-width: 620px) { .rev-item { grid-template-columns: 1fr; } }
-  .rev-mais summary { cursor: pointer; font-size: 13.5px; font-weight: 600; color: var(--acento); padding: 4px 0; }
-  .rev-prox { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .rev-bloco { display: grid; gap: 18px; }
+  .rev { padding: 6px 16px; }
+  .rev-vazio { margin: 0; padding: 10px 0; font-size: 14px; color: var(--suave); display: flex; align-items: center; gap: 8px; }
+  .rev-vazio.ok { color: var(--texto); }
+  .rev-check { width: 22px; height: 22px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 12px; font-weight: 800; background: rgba(30,142,90,.12); color: var(--bom); }
+  .rev-linhas { display: grid; }
+  .rev-linha { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px 16px; align-items: center; padding: 12px 0; }
+  .rev-linha + .rev-linha { border-top: 1px solid var(--linha); }
+  .rev-linha.oculto { display: none; }
+  .rev-tema { display: grid; gap: 2px; min-width: 0; }
+  .rev-tema b { font-size: 15px; }
+  .rev-tema small { font-size: 12.5px; color: var(--suave); }
+  .rev-linha.primeiro .rev-tema b::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--acento); margin-right: 8px; vertical-align: 2px; }
+  .rev-etapas { display: inline-flex; gap: 4px; }
+  .rev-etapas i { width: 7px; height: 7px; border-radius: 50%; background: #E2E6EE; }
+  .rev-etapas i.feita { background: var(--bom); }
+  .rev-etapas i.atual { background: #fff; box-shadow: inset 0 0 0 2px var(--acento); }
+  .rev-btns { display: flex; gap: 6px; }
+  .rev-mais { font: inherit; font-size: 13px; font-weight: 600; color: var(--acento); background: none; border: 0; border-top: 1px solid var(--linha); width: 100%; text-align: left; padding: 10px 0; cursor: pointer; }
+  @media (max-width: 620px) { .rev-linha { grid-template-columns: minmax(0, 1fr) auto; } .rev-btns { grid-column: 1 / -1; } }
   .pdf-card { display: grid; gap: 10px; border: 1.5px solid #C9D6EA; }
   .pdf-lista { display: grid; gap: 0; }
   .pdf-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; }
