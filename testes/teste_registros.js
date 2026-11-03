@@ -65,18 +65,23 @@ function novoServidor(){
   // ---------- regras da agenda (7 dias × 1,4 até 30) ----------
   const ag=await p.evaluate(()=>{const A=window.Registros.agenda,E=[{materia:'Física',tema:'Óptica',data:'2026-10-01',questao:'101',simulado:'S'}];
     const seq=[],revs=[];let hoje='2026-10-08';
-    for(let i=0;i<7;i++){const a=A(E,revs,hoje)[0];seq.push(a.situacao+':'+a.intervalo+':'+(a.proxima||'-'));if(a.situacao==='consolidado')break;revs.push({materia:'Física',tema:'Óptica',resultado:'bem',data:a.proxima});hoje=a.proxima;}
+    for(let i=0;i<7;i++){const a=A(E,revs,hoje)[0];seq.push(a.situacao+':'+a.intervalo+':'+(a.proxima||'-'));if(a.situacao==='consolidado')break;revs.push({materia:'Física',tema:'Óptica',resultado:'medio',data:a.proxima});hoje=a.proxima;}
     const dif=A(E,[{materia:'Física',tema:'óptica',resultado:'dificil',data:'2026-10-08'}],'2026-10-09')[0];
-    const novoErro=A(E.concat([{materia:'Física',tema:'Optica',data:'2026-10-12',questao:'',simulado:'T'}]),[{materia:'Física',tema:'Óptica',resultado:'bem',data:'2026-10-08'}],'2026-10-13')[0];
-    return {seq,etapas:window.Registros.ETAPAS,dif:dif.proxima,novo:[novoErro.proxima,novoErro.nErros]};});
-  ok(JSON.stringify(ag.etapas)==='[7,10,14,19,27,30]','intervalos 7 → 10 → 14 → 19 → 27 → 30');
+    const fac=A(E,[{materia:'Física',tema:'Óptica',resultado:'facil',data:'2026-10-08'},{materia:'Física',tema:'Óptica',resultado:'facil',data:'2026-10-19'}],'2026-10-20')[0];
+    const difLongo=A(E,[{materia:'Física',tema:'Óptica',resultado:'medio',data:'2026-10-08'},{materia:'Física',tema:'Óptica',resultado:'medio',data:'2026-10-18'},{materia:'Física',tema:'Óptica',resultado:'dificil',data:'2026-11-01'}],'2026-11-02')[0];
+    const novoErro=A(E.concat([{materia:'Física',tema:'Optica',data:'2026-10-12',questao:'',simulado:'T'}]),[{materia:'Física',tema:'Óptica',resultado:'medio',data:'2026-10-08'}],'2026-10-13')[0];
+    return {seq,etapas:window.Registros.ETAPAS,dif:dif.proxima,fac:[fac.intervalo,fac.proxima],difLongo:[difLongo.intervalo,difLongo.proxima],novo:[novoErro.proxima,novoErro.nErros]};});
+  ok(JSON.stringify(ag.etapas)==='[7,10,14,19,27,30]','médio: intervalos 7 → 10 → 14 → 19 → 27 → 30');
   ok(ag.seq.map(s=>s.split(':').slice(1).join(':')).join(' ')==='7:2026-10-08 10:2026-10-18 14:2026-11-01 19:2026-11-20 27:2026-12-17 30:2027-01-16 30:-'&&ag.seq[6].indexOf('consolidado')===0,'cada revisão boa multiplica por 1,4; teto de 30; depois consolida '+ag.seq.join(' | '));
-  ok(ag.dif==='2026-10-15','"ainda tenho dificuldade" volta para 7 dias');
+  ok(ag.dif==='2026-10-15','difícil no 1º intervalo fica em 7 dias (mínimo)');
+  ok(ag.fac[0]===18&&ag.fac[1]==='2026-11-06','fácil multiplica por 1,6 (7 → 11 → 18) '+ag.fac);
+  ok(ag.difLongo[0]===7&&ag.difLongo[1]==='2026-11-08','difícil corta o intervalo pela metade (14 → 7) '+ag.difLongo);
   ok(ag.novo[0]==='2026-10-19'&&ag.novo[1]===2,'erro novo no tema (grafia diferente) recomeça em 7 dias');
+  ok((await p.$$('.rev-linha .nivel')).length===3&&await p.$eval('.nivel.facil',e=>getComputedStyle(e).backgroundColor)==='rgb(221, 243, 230)','três botões (fácil verde, médio amarelo, difícil vermelho) em tons pastel');
   await p.screenshot({path:__dirname+'/aluno_revisao.png',clip:{x:0,y:250,width:1100,height:260}});
-  await p.click('.rev-linha button:has-text("Fui bem")');await p.waitForTimeout(300);
-  ok(srv.st.revs.length===1&&srv.st.revs[0].resultado==='bem','marca a revisão no servidor');
-  ok((await p.textContent('.toast')).includes('Próxima revisão qui 12/11'),'avisa a próxima revisão (10 dias depois)');
+  await p.click('.rev-linha button.nivel.medio');await p.waitForTimeout(300);
+  ok(srv.st.revs.length===1&&srv.st.revs[0].resultado==='medio','marca a revisão no servidor');
+  ok((await p.textContent('.toast')).includes('Próxima revisão em 10 dias (qui 12/11)'),'avisa a próxima revisão (10 dias depois)');
   ok((await p.textContent('.rev')).includes('Tudo em dia'),'tema revisado sai da lista de hoje');
   await p.screenshot({path:__dirname+'/aluno_revisao_ok.png',clip:{x:0,y:250,width:1100,height:200}});
   ok(!!(await p.$('.grade4')),'painel com os cartões dentro da caixa');

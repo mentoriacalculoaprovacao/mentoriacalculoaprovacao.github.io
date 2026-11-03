@@ -265,6 +265,12 @@
   .rev-etapas i.feita { background: var(--bom); }
   .rev-etapas i.atual { background: #fff; box-shadow: inset 0 0 0 2px var(--acento); }
   .rev-btns { display: flex; gap: 6px; }
+  .nivel { font: inherit; font-size: 13px; font-weight: 700; padding: 7px 13px; border-radius: 9px; cursor: pointer; border: 1px solid; transition: filter .15s; }
+  .nivel:hover { filter: brightness(.96); }
+  .nivel:disabled { opacity: .55; cursor: default; }
+  .nivel.facil { background: #DDF3E6; border-color: #BFE3CD; color: #1D6B45; }
+  .nivel.medio { background: #FFF2C9; border-color: #F2DE9B; color: #7A5A00; }
+  .nivel.dificil { background: #FBE0DE; border-color: #F2C4C0; color: #9A2E28; }
   .rev-mais { font: inherit; font-size: 13px; font-weight: 600; color: var(--acento); background: none; border: 0; border-top: 1px solid var(--linha); width: 100%; text-align: left; padding: 10px 0; cursor: pointer; }
   @media (max-width: 620px) { .rev-linha { grid-template-columns: minmax(0, 1fr) auto; } .rev-btns { grid-column: 1 / -1; } }
   .pdf-card { display: grid; gap: 10px; border: 1.5px solid #C9D6EA; }

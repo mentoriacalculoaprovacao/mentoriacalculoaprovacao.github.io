@@ -650,11 +650,13 @@ window.Registros = (function () {
   }
 
   // ===================== Revisão espaçada do caderno =====================
-  // Cada tema do caderno ("Matéria – Tema") volta para revisão 7 dias depois do erro. Revisou e foi bem: o próximo
-  // intervalo é 1,4 vez o anterior (7 → 10 → 14 → 19 → 27 → 30 dias, teto de 30); foi bem na de 30 dias: consolidado.
-  // Ainda com dificuldade, ou erro novo no tema: volta para 7 dias. Prioridade do dia = erros do tema × atraso relativo.
-  var REV = { primeiro: 7, fator: 1.4, maximo: 30 };
-  var ETAPAS = (function () { var l = [REV.primeiro], x = REV.primeiro; while (x < REV.maximo) { x = Math.min(x * REV.fator, REV.maximo); l.push(Math.round(x)); } return l; })();
+  // Cada tema do caderno ("Matéria – Tema") volta para revisão 7 dias depois do erro. Depois de cada revisão o aluno diz
+  // como foi e o intervalo é multiplicado: fácil × 1,6 · médio × 1,4 · difícil × 0,5 (mínimo 7, teto 30 dias).
+  // Fácil ou médio na revisão de 30 dias: tema consolidado. Erro novo no tema: volta para 7 dias.
+  // Prioridade do dia = erros do tema × atraso relativo. ("bem", dos primeiros registros, conta como médio.)
+  var REV = { primeiro: 7, maximo: 30, fator: { facil: 1.6, medio: 1.4, bem: 1.4, dificil: 0.5 } };
+  var ETAPAS = (function () { var l = [REV.primeiro], x = REV.primeiro; while (x < REV.maximo) { x = Math.min(x * REV.fator.medio, REV.maximo); l.push(Math.round(x)); } return l; })();
+  function etapaDe(intervalo) { var k = 0; ETAPAS.forEach(function (e, i) { if (Math.round(intervalo) >= e) k = i; }); return k; }
   var SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
   function diaN(iso) { var p = String(iso).split('-'); return Math.round(Date.UTC(+p[0], +p[1] - 1, +p[2]) / 864e5); }
   function isoDe(n) { return new Date(n * 864e5).toISOString().slice(0, 10); }
@@ -675,10 +677,10 @@ window.Registros = (function () {
         if (ev.tipo === 'erro') { intervalo = REV.primeiro; etapa = 0; prox = ev.d + REV.primeiro; consolidado = false; return; }
         if (intervalo === null) return;
         nRev++;
-        if (ev.tipo === 'dificil') { intervalo = REV.primeiro; etapa = 0; prox = ev.d + REV.primeiro; consolidado = false; return; }
-        if (consolidado) return;
-        if (intervalo >= REV.maximo) { consolidado = true; prox = null; etapa = ETAPAS.length; return; }
-        intervalo = Math.min(intervalo * REV.fator, REV.maximo); etapa++; prox = ev.d + Math.round(intervalo);
+        var f = REV.fator[ev.tipo];
+        if (!f || consolidado) return;
+        if (f >= 1 && intervalo >= REV.maximo) { consolidado = true; prox = null; etapa = ETAPAS.length; return; }
+        intervalo = Math.max(REV.primeiro, Math.min(intervalo * f, REV.maximo)); etapa = etapaDe(intervalo); prox = ev.d + Math.round(intervalo);
       });
       var tema = maisUsada(x.grafias), atraso = prox === null ? 0 : H - prox;
       var questoes = x.erros.filter(function (e) { return e.questao; }).slice(-6).map(function (e) { return { q: e.questao, sim: e.simulado }; });
@@ -739,21 +741,23 @@ window.Registros = (function () {
         var box = el('div', { class: 'rev-linha' + (primeiro ? ' primeiro' : '') }, [
           el('div', { class: 'rev-tema' }, [el('b', { text: x.rotulo }), el('small', { text: sub })]), etapas]);
         if (!c.mentor) {
-          var bem = el('button', { class: 'mini forte', type: 'button', text: 'Fui bem' });
-          var dif = el('button', { class: 'mini', type: 'button', text: 'Difícil' });
+          var bts = [['facil', 'Fácil'], ['medio', 'Médio'], ['dificil', 'Difícil']].map(function (o) {
+            var b = el('button', { class: 'nivel ' + o[0], type: 'button', title: 'Achei ' + o[1].toLowerCase(), text: o[1] });
+            b.onclick = function () { marcar(o[0]); };
+            return b;
+          });
+          var travar = function (v) { bts.forEach(function (b) { b.disabled = v; }); };
           var marcar = function (res) {
-            bem.disabled = dif.disabled = true;
+            travar(true);
             c.api('registrarRevisao', { id: c.id, materia: x.materia, tema: x.tema, resultado: res }).then(function (y) {
-              if (!y || !y.ok) { bem.disabled = dif.disabled = false; c.aviso(msgErro(y), true); return; }
+              if (!y || !y.ok) { travar(false); c.aviso(msgErro(y), true); return; }
               r.revisoes.push({ materia: x.materia, tema: x.tema, resultado: res, data: y.data || r.hoje });
               var d = agenda(r.erros, r.revisoes, r.hoje).filter(function (z) { return z.chave === x.chave; })[0];
-              c.aviso(d && d.situacao === 'consolidado' ? x.rotulo + ': tema consolidado!' : 'Próxima revisão ' + dataCurta(d.proxima) + '.');
+              c.aviso(d && d.situacao === 'consolidado' ? x.rotulo + ': tema consolidado!' : 'Próxima revisão em ' + d.intervalo + ' dias (' + dataCurta(d.proxima) + ').');
               desenhar(r);
-            }).catch(function () { bem.disabled = dif.disabled = false; c.aviso('Sem conexão. Tente de novo.', true); });
+            }).catch(function () { travar(false); c.aviso('Sem conexão. Tente de novo.', true); });
           };
-          bem.onclick = function () { marcar('bem'); };
-          dif.onclick = function () { marcar('dificil'); };
-          box.appendChild(el('div', { class: 'rev-btns' }, [bem, dif]));
+          box.appendChild(el('div', { class: 'rev-btns', role: 'group', 'aria-label': 'Como foi a revisão?' }, bts));
         }
         return box;
       }
