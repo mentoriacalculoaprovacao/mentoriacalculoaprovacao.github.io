@@ -206,6 +206,14 @@ function novoServidor(){
   await p.click('.aba:has-text("Caderno")');await p.waitForTimeout(400);
   ok((await p.$$('.item-erro')).length>=1,'mentor vê o caderno do aluno');
   ok(srv.st.log.filter(a=>a==='caderno').length===1,'chamou o caderno do aluno');
+  srv.st.erros.push({linha:9,simulado:'Bernoulli 2 2025',materia:'Física',parte:'Óptica',motivo:'Chutei',questao:'101',data:'2026-11-01'});
+  await p.click('.aba:has-text("Painel")');await p.waitForTimeout(200);await p.click('.aba:has-text("Caderno de erros")');await p.waitForTimeout(500);
+  const blocos=await p.$$eval('.grupo-sim',l=>l.map(c=>[c.dataset.simulado,c.classList.contains('aberto')]));
+  ok(blocos.length>=2&&blocos[0][1]&&!blocos[1][1],'um bloco por simulado; o mais recente aberto '+JSON.stringify(blocos));
+  ok(await p.$eval('.grupo-sim.aberto .grupo-cab',e=>getComputedStyle(e).position)==='sticky','nome do simulado fica grudado no topo ao rolar');
+  await p.click('.filtro-sim .chip:has-text("SAS 1 2024")');await p.waitForTimeout(100);
+  ok(JSON.stringify(await p.$$eval('.grupo-sim',l=>l.filter(c=>c.style.display!=='none').map(c=>[c.dataset.simulado,c.classList.contains('aberto')])))==='[["SAS 1 2024",true]]','filtro por simulado mostra só aquele, aberto');
+  await p.click('.filtro-sim .chip:has-text("Todos")');await p.waitForTimeout(100);
   await p.screenshot({path:__dirname+'/mentor_caderno.png',fullPage:true});
   // ---------- Rotina (mentor edita) ----------
   await p.click('.aba:has-text("Rotina")');await p.waitForTimeout(400);

@@ -374,19 +374,46 @@ window.Registros = (function () {
         el('div', { class: 'acoes-form' }, [btSalvar])
       ]));
 
-      // ---------- Erros já registrados ----------
+      // ---------- Erros já registrados: um bloco por simulado, com o nome sempre à vista ----------
+      // O simulado mais recente começa aberto; os outros abrem com um toque. Com mais de um simulado, chips filtram a lista.
       var grupos = {}, ordem = [];
       r.erros.slice().reverse().forEach(function (e) { var k = e.simulado || 'Sem simulado'; if (!grupos[k]) { grupos[k] = []; ordem.push(k); } grupos[k].push(e); });
       if (!ordem.length) raiz.appendChild(el('div', { class: 'card vazio-card' }, [el('p', { class: 'vazio', text: c.mentor ? 'Nenhum erro registrado ainda.' : 'Nenhum erro registrado ainda. Comece pelo último simulado que você fez.' })]));
-      ordem.forEach(function (k) {
-        var card = el('div', { class: 'card' }, [el('div', { class: 'sim-cab' }, [el('b', { text: k }), el('span', { class: 'nota', style: 'margin:0', text: grupos[k].length + (grupos[k].length === 1 ? ' erro' : ' erros') })])]);
+      var blocos = [];
+      if (ordem.length > 1) {
+        var filtros = el('div', { class: 'filtros filtro-sim', role: 'group', 'aria-label': 'Filtrar por simulado' });
+        var chips = [['', 'Todos', r.erros.length]].concat(ordem.map(function (k) { return [k, k, grupos[k].length]; }));
+        chips.forEach(function (o) {
+          var b = el('button', { class: 'chip', type: 'button', 'aria-pressed': String(o[0] === ''), title: o[1] }, [o[1], el('b', { text: String(o[2]) })]);
+          b.onclick = function () {
+            Array.prototype.forEach.call(filtros.children, function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+            blocos.forEach(function (bl) { var mostra = !o[0] || bl.nome === o[0]; bl.card.style.display = mostra ? '' : 'none'; if (o[0] && mostra) bl.abrir(true); });
+          };
+          filtros.appendChild(b);
+        });
+        raiz.appendChild(filtros);
+      }
+      ordem.forEach(function (k, idx) {
+        var n = grupos[k].length;
+        var cab = el('button', { class: 'grupo-cab', type: 'button' }, [
+          el('span', { class: 'grupo-nome' }, [el('span', { class: 'seta', 'aria-hidden': 'true' }), el('b', { text: k })]),
+          el('span', { class: 'nota', style: 'margin:0', text: n + (n === 1 ? ' erro' : ' erros') })]);
+        var corpo = el('div', { class: 'grupo-corpo' });
         var f = faltamDe(k);
-        if (f && f.length) card.appendChild(el('div', { class: 'progresso-areas' }, f.map(function (x) {
+        if (f && f.length) corpo.appendChild(el('div', { class: 'progresso-areas' }, f.map(function (x) {
           return el('span', { class: 'tag' + (x.falta ? '' : ' completo'), text: x.nome + ' ' + Math.min(x.registrado, x.esperado) + ' de ' + x.esperado });
         })));
-        grupos[k].sort(function (a, b) { return (Number(a.questao) || 9999) - (Number(b.questao) || 9999); }).forEach(function (e) { card.appendChild(itemErro(e)); });
+        grupos[k].sort(function (a, b) { return (Number(a.questao) || 9999) - (Number(b.questao) || 9999); }).forEach(function (e) { corpo.appendChild(itemErro(e)); });
+        var card = el('div', { class: 'card grupo-sim', 'data-simulado': k }, [cab, corpo]);
+        var abrir = function (v) { card.classList.toggle('aberto', v); cab.setAttribute('aria-expanded', String(v)); };
+        cab.onclick = function () { abrir(!card.classList.contains('aberto')); };
+        abrir(idx === 0);
+        blocos.push({ nome: k, card: card, abrir: abrir });
         raiz.appendChild(card);
       });
+      // O cabeçalho do simulado gruda logo abaixo da barra fixa de alunos (mentor/gestor) enquanto a lista rola
+      var fixo = document.querySelector('.seletor');
+      document.documentElement.style.setProperty('--topo-fixo', (fixo ? fixo.offsetHeight : 0) + 'px');
 
       function itemErro(e) {
         var acoes = el('div', { class: 'acoes' });

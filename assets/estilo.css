@@ -292,3 +292,17 @@
   .progresso-areas { display: flex; gap: 6px; flex-wrap: wrap; margin: 2px 0 4px; }
   .progresso-areas .tag.completo { background: #E3F4EA; border-color: #BFE3CD; color: var(--bom); }
   .dica.alerta { color: var(--aviso); font-weight: 600; }
+
+  /* ---------- Caderno: blocos por simulado ---------- */
+  .filtro-sim .chip { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+  .grupo-sim { padding: 0; }
+  .grupo-cab { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 12px; font: inherit; text-align: left; color: var(--texto);
+    background: #fff; border: 0; border-radius: 14px; padding: 14px 16px; cursor: pointer; }
+  .grupo-sim.aberto .grupo-cab { position: sticky; top: var(--topo-fixo, 0px); z-index: 3; border-radius: 14px 14px 0 0; border-bottom: 1px solid var(--linha); }
+  .grupo-nome { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .grupo-nome b { overflow-wrap: anywhere; }
+  .seta { flex: none; width: 8px; height: 8px; border-right: 2px solid var(--suave); border-bottom: 2px solid var(--suave); transform: rotate(-45deg); transition: transform .15s; margin: 0 2px; }
+  .grupo-sim.aberto .seta { transform: rotate(45deg); }
+  .grupo-corpo { display: none; padding: 4px 16px 10px; }
+  .grupo-sim.aberto .grupo-corpo { display: block; }
+  .grupo-corpo > .item-erro:first-child { border-top: 0; }
