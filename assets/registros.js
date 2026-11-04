@@ -8,7 +8,7 @@ window.Registros = (function () {
   };
   var COMP = ['C1 · Norma culta', 'C2 · Tema e repertório', 'C3 · Argumentação', 'C4 · Coesão', 'C5 · Proposta de intervenção'];
   var MSG = {
-    faseDesligada: 'Esta parte do app ainda não está liberada.', proibido: 'Você não tem acesso a este aluno.', soMentor: 'Só o mentor cadastrado deste aluno pode editar a rotina.',
+    faseDesligada: 'Esta parte do app ainda não está liberada.', proibido: 'Você não tem acesso a este aluno.', soMentor: 'Só o mentor cadastrado deste aluno pode editar a rotina.', soAluno: 'Só o próprio aluno marca os erros que já corrigiu.',
     ocupado: 'O sistema está ocupado salvando outra coisa. Tente de novo em alguns segundos.', naoEncontrado: 'Não encontrei esse registro. Recarregue a página.',
     falha: 'O servidor não conseguiu concluir agora. Tente de novo em instantes.'
   };
@@ -397,7 +397,7 @@ window.Registros = (function () {
         var n = grupos[k].length;
         var cab = el('button', { class: 'grupo-cab', type: 'button' }, [
           el('span', { class: 'grupo-nome' }, [el('span', { class: 'seta', 'aria-hidden': 'true' }), el('b', { text: k })]),
-          el('span', { class: 'nota', style: 'margin:0', text: n + (n === 1 ? ' erro' : ' erros') })]);
+          el('span', { class: 'nota cont-corr', style: 'margin:0', text: textoContagem(n, grupos[k].filter(function (e) { return e.corrigido; }).length) })]);
         var corpo = el('div', { class: 'grupo-corpo' });
         var f = faltamDe(k);
         if (f && f.length) corpo.appendChild(el('div', { class: 'progresso-areas' }, f.map(function (x) {
@@ -411,6 +411,12 @@ window.Registros = (function () {
         blocos.push({ nome: k, card: card, abrir: abrir });
         raiz.appendChild(card);
       });
+      function textoContagem(n, feitos) { return n + (n === 1 ? ' erro' : ' erros') + (feitos ? ' · ' + feitos + (feitos === 1 ? ' corrigido' : ' corrigidos') : ''); }
+      function atualizarContagem(item) {
+        var card = item.closest('.grupo-sim'); if (!card) return;
+        var n = card.querySelectorAll('.check-corr').length, f = card.querySelectorAll('.check-corr[aria-checked="true"]').length;
+        card.querySelector('.cont-corr').textContent = textoContagem(n, f);
+      }
       // O cabeçalho do simulado gruda logo abaixo da barra fixa de alunos (mentor/gestor) enquanto a lista rola
       var fixo = document.querySelector('.seletor');
       document.documentElement.style.setProperty('--topo-fixo', (fixo ? fixo.offsetHeight : 0) + 'px');
@@ -420,8 +426,23 @@ window.Registros = (function () {
         var ed = el('button', { class: 'mini', type: 'button', text: 'Editar' });
         var ex = el('button', { class: 'mini', type: 'button', text: 'Excluir' });
         acoes.appendChild(ed); acoes.appendChild(ex);
-        var item = el('div', { class: 'item-erro' }, [el('span', { class: 'q-num' + (e.questao ? '' : ' sem'), title: 'Número da questão', text: e.questao ? 'Q' + e.questao : 'Q?' }),
-          el('span', { class: 'tag', text: e.materia || '—' }), el('span', { class: 'item-txt' }, [el('span', { text: e.parte }), el('small', { text: e.motivo })]), acoes]);
+        // Caixinha "já corrigi": o aluno marca; o mentor só vê (com a data)
+        var feito = !!e.corrigido;
+        var chk = el('button', { class: 'check-corr', type: 'button', role: 'checkbox', 'aria-checked': String(feito),
+          'aria-label': 'Já corrigi a questão ' + (e.questao || ''), title: feito ? 'Corrigido em ' + e.corrigido : (c.mentor ? 'Ainda não corrigido' : 'Marque quando já tiver corrigido') });
+        if (c.mentor) chk.disabled = true;
+        var item = el('div', { class: 'item-erro' + (feito ? ' corrigido' : '') }, [chk, el('span', { class: 'q-num' + (e.questao ? '' : ' sem'), title: 'Número da questão', text: e.questao ? 'Q' + e.questao : 'Q?' }),
+          el('span', { class: 'tag', text: e.materia || '—' }), el('span', { class: 'item-txt' }, [el('span', { text: e.parte }), el('small', { text: e.motivo + (feito && c.mentor ? ' · corrigido em ' + e.corrigido : '') })]), acoes]);
+        chk.onclick = function () {
+          var novo = chk.getAttribute('aria-checked') !== 'true';
+          var aplicar = function (v) { chk.setAttribute('aria-checked', String(v)); item.classList.toggle('corrigido', v); atualizarContagem(item); };
+          aplicar(novo); chk.disabled = true;
+          c.api('marcarCorrigido', { id: c.id, linha: e.linha, antes: e, corrigido: novo }).then(function (x) {
+            chk.disabled = false;
+            if (!x || !x.ok) { aplicar(!novo); c.aviso(msgErro(x), true); return; }
+            e.corrigido = x.corrigido || ''; chk.title = novo ? 'Corrigido em ' + e.corrigido : 'Marque quando já tiver corrigido';
+          }).catch(function () { chk.disabled = false; aplicar(!novo); c.aviso('Sem conexão. Tente de novo.', true); });
+        };
         ex.onclick = function () {
           confirmarInline(acoes, 'Excluir?', 'Excluir', function () {
             c.api('excluirErro', { id: c.id, linha: e.linha, antes: e }).then(function (x) {

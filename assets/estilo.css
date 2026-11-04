@@ -203,13 +203,13 @@
   .linha-erro datalist { display: none; }
   @media (max-width: 720px) { .linha-erro, .linha-erro.edicao { grid-template-columns: 1fr; } }
   .pendentes { display: grid; gap: 6px; }
-  .item-erro { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 0; border-top: 1px solid var(--linha); }
+  .item-erro { display: grid; grid-template-columns: auto auto auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 0; border-top: 1px solid var(--linha); }
   .item-erro.pend { grid-template-columns: auto minmax(0, 1fr) auto; }
   .item-erro.pend { border: 1px dashed #C9D6EA; border-radius: 10px; padding: 8px 10px; background: #F7FAFE; }
   .item-erro.editando { grid-template-columns: 1fr; }
   .item-txt { display: grid; gap: 1px; min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
   .item-txt small { color: var(--suave); font-size: 12.5px; }
-  @media (max-width: 520px) { .item-erro { grid-template-columns: auto auto minmax(0, 1fr); } .item-erro.pend { grid-template-columns: auto minmax(0, 1fr) auto; } .item-erro .acoes { grid-column: 1 / -1; } }
+  @media (max-width: 520px) { .item-erro { grid-template-columns: auto auto auto minmax(0, 1fr); } .item-erro.pend { grid-template-columns: auto minmax(0, 1fr) auto; } .item-erro .acoes { grid-column: 1 / -1; } }
 
   /* ---------- Rotina ---------- */
   .rotina-rolagem { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--linha); border-radius: 12px; background: #fff; }
@@ -306,3 +306,11 @@
   .grupo-corpo { display: none; padding: 4px 16px 10px; }
   .grupo-sim.aberto .grupo-corpo { display: block; }
   .grupo-corpo > .item-erro:first-child { border-top: 0; }
+
+  /* ---------- Caderno: caixinha "já corrigi" ---------- */
+  .check-corr { width: 24px; height: 24px; flex: none; border-radius: 7px; border: 2px solid #B9C2D0; background: #fff; cursor: pointer; padding: 0; position: relative; transition: background .15s, border-color .15s; }
+  .check-corr:hover:not(:disabled) { border-color: var(--bom); }
+  .check-corr[aria-checked="true"] { background: #DDF3E6; border-color: #7CC79C; }
+  .check-corr[aria-checked="true"]::after { content: ''; position: absolute; left: 7px; top: 3px; width: 6px; height: 11px; border: solid #1D6B45; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); }
+  .check-corr:disabled { cursor: default; }
+  .item-erro.corrigido .item-txt > span { color: var(--suave); }

@@ -31,6 +31,7 @@ function novoServidor(){
       case 'excluirSimulado': st.lanc=st.lanc.filter(l=>l.id!==req.idLanc); return {ok:true};
       case 'caderno': return {ok:true,esperados:{sas12024:{L:15,H:17,N:null,M:null},bernoulli22025:{L:10,H:12,N:18,M:20}},erros:st.erros,simulados:['Bernoulli 2 2025','SAS 1 2024'],materias:['Física','Química','Biologia','Matemática','História','Geografia','Linguagens','Sociologia','Filosofia'],motivos:['Não sabia o conteúdo','Interpretação do enunciado','Falta de atenção','Erro de cálculo']};
       case 'salvarErros': req.erros.forEach(e=>st.erros.push(Object.assign({linha:3+st.erros.length,data:'2026-11-01'},e))); return {ok:true,n:req.erros.length};
+      case 'marcarCorrigido': { if(papel!=='aluno') return {ok:false,erro:'soAluno'}; const e=st.erros.find(y=>y.linha===req.linha); if(!e||e.simulado!==req.antes.simulado) return {ok:false,erro:'mudou'}; e.corrigido=req.corrigido?'04/11/2026':''; return {ok:true,corrigido:e.corrigido}; }
       case 'revisoes': return {ok:true,hoje:'2026-11-02',revisoes:st.revs,erros:st.erros.map(e=>({simulado:e.simulado,materia:e.materia,tema:e.parte,questao:e.questao,data:e.data||'2026-10-20'}))};
       case 'registrarRevisao': st.revs.push({materia:req.materia,tema:req.tema,resultado:req.resultado,data:'2026-11-02'}); return {ok:true,data:'2026-11-02'};
       case 'pdfs': return {ok:true,hoje:'2026-11-02',podeGerenciar:papel==='gestor',maxBytes:15*1048576,pdfs:st.pdfs.filter(p=>papel==='gestor'||p.liberado)};
@@ -173,6 +174,12 @@ function novoServidor(){
   await p.click('.form-reg .botao');await p.waitForTimeout(600);
   ok(srv.st.erros.length===3&&srv.st.erros.some(e=>e.parte==='Cinemática'&&e.simulado==='Bernoulli 2 2025'&&e.questao==='98'),'erros salvos com o simulado e o número da questão');
   ok(JSON.stringify(await p.$$eval('.card:has-text("Bernoulli 2 2025") .q-num',x=>x.map(y=>y.textContent)))==='["Q98","Q112"]','erros do simulado em ordem de questão');
+  await p.click('.item-erro:has-text("Q98") .check-corr');await p.waitForTimeout(300);
+  ok(srv.st.erros.find(e=>e.questao==='98').corrigido==='04/11/2026'&&await p.getAttribute('.item-erro:has-text("Q98") .check-corr','aria-checked')==='true','aluno marca o erro como corrigido');
+  ok((await p.textContent('.grupo-sim:has-text("Bernoulli 2 2025") .cont-corr'))==='2 erros · 1 corrigido','cabeçalho conta os corrigidos');
+  await p.click('.item-erro:has-text("Q98") .check-corr');await p.waitForTimeout(300);
+  ok(srv.st.erros.find(e=>e.questao==='98').corrigido===''&&(await p.textContent('.grupo-sim:has-text("Bernoulli 2 2025") .cont-corr'))==='2 erros','desmarcar volta ao normal');
+  await p.click('.item-erro:has-text("Q112") .check-corr');await p.waitForTimeout(300);
   await p.click('.item-erro:has-text("Cinemática") button:has-text("Editar")');await p.waitForTimeout(100);
   ok(await p.inputValue('.editando input[aria-label="Número da questão"]')==='98','edição traz o número da questão');
   await p.fill('.editando input[aria-label="Tema"]','Dinâmica');await p.click('.editando button:has-text("Salvar")');await p.waitForTimeout(500);
@@ -208,6 +215,7 @@ function novoServidor(){
   ok(srv.st.log.filter(a=>a==='caderno').length===1,'chamou o caderno do aluno');
   srv.st.erros.push({linha:9,simulado:'Bernoulli 2 2025',materia:'Física',parte:'Óptica',motivo:'Chutei',questao:'101',data:'2026-11-01'});
   await p.click('.aba:has-text("Painel")');await p.waitForTimeout(200);await p.click('.aba:has-text("Caderno de erros")');await p.waitForTimeout(500);
+  ok(await p.$eval('.check-corr',e=>e.disabled)===true,'mentor vê a caixinha, mas não marca');
   const blocos=await p.$$eval('.grupo-sim',l=>l.map(c=>[c.dataset.simulado,c.classList.contains('aberto')]));
   ok(blocos.length>=2&&blocos[0][1]&&!blocos[1][1],'um bloco por simulado; o mais recente aberto '+JSON.stringify(blocos));
   ok(await p.$eval('.grupo-sim.aberto .grupo-cab',e=>getComputedStyle(e).position)==='sticky','nome do simulado fica grudado no topo ao rolar');
