@@ -174,12 +174,16 @@ function novoServidor(){
   await p.click('.form-reg .botao');await p.waitForTimeout(600);
   ok(srv.st.erros.length===3&&srv.st.erros.some(e=>e.parte==='Cinemática'&&e.simulado==='Bernoulli 2 2025'&&e.questao==='98'),'erros salvos com o simulado e o número da questão');
   ok(JSON.stringify(await p.$$eval('.card:has-text("Bernoulli 2 2025") .q-num',x=>x.map(y=>y.textContent)))==='["Q98","Q112"]','erros do simulado em ordem de questão');
-  await p.click('.item-erro:has-text("Q98") .check-corr');await p.waitForTimeout(300);
-  ok(srv.st.erros.find(e=>e.questao==='98').corrigido==='04/11/2026'&&await p.getAttribute('.item-erro:has-text("Q98") .check-corr','aria-checked')==='true','aluno marca o erro como corrigido');
-  ok((await p.textContent('.grupo-sim:has-text("Bernoulli 2 2025") .cont-corr'))==='2 erros · 1 corrigido','cabeçalho conta os corrigidos');
-  await p.click('.item-erro:has-text("Q98") .check-corr');await p.waitForTimeout(300);
-  ok(srv.st.erros.find(e=>e.questao==='98').corrigido===''&&(await p.textContent('.grupo-sim:has-text("Bernoulli 2 2025") .cont-corr'))==='2 erros','desmarcar volta ao normal');
-  await p.click('.item-erro:has-text("Q112") .check-corr');await p.waitForTimeout(300);
+  await p.click('.item-erro:has-text("Q98") .check-corr');await p.waitForTimeout(500);
+  ok(srv.st.erros.find(e=>e.questao==='98').corrigido==='04/11/2026','aluno marca o erro como corrigido (fica salvo)');
+  ok(!(await p.$('.grupo-sim .item-erro:has-text("Q98")'))&&(await p.textContent('.grupo-sim:has-text("Bernoulli 2 2025") .grupo-cab .nota'))==='1 erro para corrigir','erro corrigido sai da lista do aluno');
+  ok((await p.textContent('.toast')).includes('continua na sua revisão'),'avisa que continua na revisão');
+  ok((await p.textContent('.link-corrigidos'))==='Ver erros já corrigidos (1)','link para ver os corrigidos');
+  await p.click('.link-corrigidos');await p.waitForTimeout(200);
+  ok(!!(await p.$('.card.corrigidos .item-erro:has-text("Q98") .check-corr[aria-checked="true"]')),'corrigidos aparecem marcados ao abrir');
+  await p.click('.card.corrigidos .item-erro:has-text("Q98") .check-corr');await p.waitForTimeout(500);
+  ok(srv.st.erros.find(e=>e.questao==='98').corrigido===''&&!!(await p.$('.grupo-sim .item-erro:has-text("Q98")'))&&!(await p.$('.link-corrigidos')),'desmarcar devolve o erro para a lista');
+
   await p.click('.item-erro:has-text("Cinemática") button:has-text("Editar")');await p.waitForTimeout(100);
   ok(await p.inputValue('.editando input[aria-label="Número da questão"]')==='98','edição traz o número da questão');
   await p.fill('.editando input[aria-label="Tema"]','Dinâmica');await p.click('.editando button:has-text("Salvar")');await p.waitForTimeout(500);
@@ -213,9 +217,10 @@ function novoServidor(){
   await p.click('.aba:has-text("Caderno")');await p.waitForTimeout(400);
   ok((await p.$$('.item-erro')).length>=1,'mentor vê o caderno do aluno');
   ok(srv.st.log.filter(a=>a==='caderno').length===1,'chamou o caderno do aluno');
-  srv.st.erros.push({linha:9,simulado:'Bernoulli 2 2025',materia:'Física',parte:'Óptica',motivo:'Chutei',questao:'101',data:'2026-11-01'});
+  srv.st.erros.push({linha:9,simulado:'Bernoulli 2 2025',materia:'Física',parte:'Óptica',motivo:'Chutei',questao:'101',data:'2026-11-01',corrigido:'03/11/2026'});
   await p.click('.aba:has-text("Painel")');await p.waitForTimeout(200);await p.click('.aba:has-text("Caderno de erros")');await p.waitForTimeout(500);
   ok(await p.$eval('.check-corr',e=>e.disabled)===true,'mentor vê a caixinha, mas não marca');
+  ok((await p.textContent('.grupo-sim:has-text("Bernoulli 2 2025")')).includes('corrigido em 03/11/2026'),'mentor continua vendo o erro corrigido, com a data');
   const blocos=await p.$$eval('.grupo-sim',l=>l.map(c=>[c.dataset.simulado,c.classList.contains('aberto')]));
   ok(blocos.length>=2&&blocos[0][1]&&!blocos[1][1],'um bloco por simulado; o mais recente aberto '+JSON.stringify(blocos));
   ok(await p.$eval('.grupo-sim.aberto .grupo-cab',e=>getComputedStyle(e).position)==='sticky','nome do simulado fica grudado no topo ao rolar');

@@ -376,50 +376,78 @@ window.Registros = (function () {
 
       // ---------- Erros já registrados: um bloco por simulado, com o nome sempre à vista ----------
       // O simulado mais recente começa aberto; os outros abrem com um toque. Com mais de um simulado, chips filtram a lista.
-      var grupos = {}, ordem = [];
-      r.erros.slice().reverse().forEach(function (e) { var k = e.simulado || 'Sem simulado'; if (!grupos[k]) { grupos[k] = []; ordem.push(k); } grupos[k].push(e); });
-      if (!ordem.length) raiz.appendChild(el('div', { class: 'card vazio-card' }, [el('p', { class: 'vazio', text: c.mentor ? 'Nenhum erro registrado ainda.' : 'Nenhum erro registrado ainda. Comece pelo último simulado que você fez.' })]));
-      var blocos = [];
-      if (ordem.length > 1) {
-        var filtros = el('div', { class: 'filtros filtro-sim', role: 'group', 'aria-label': 'Filtrar por simulado' });
-        var chips = [['', 'Todos', r.erros.length]].concat(ordem.map(function (k) { return [k, k, grupos[k].length]; }));
-        chips.forEach(function (o) {
-          var b = el('button', { class: 'chip', type: 'button', 'aria-pressed': String(o[0] === ''), title: o[1] }, [o[1], el('b', { text: String(o[2]) })]);
-          b.onclick = function () {
-            Array.prototype.forEach.call(filtros.children, function (x) { x.setAttribute('aria-pressed', String(x === b)); });
-            blocos.forEach(function (bl) { var mostra = !o[0] || bl.nome === o[0]; bl.card.style.display = mostra ? '' : 'none'; if (o[0] && mostra) bl.abrir(true); });
-          };
-          filtros.appendChild(b);
+      // Para o aluno, erro marcado como corrigido sai da lista (fica em "Ver erros já corrigidos" para desfazer); ele continua
+      // na planilha, na revisão espaçada e nos temas do painel. O mentor vê todos, com a data da correção.
+      var lugarLista = el('div', { class: 'reg-lista' });
+      raiz.appendChild(lugarLista);
+      var filtroSim = '', verCorrigidos = false;
+      desenharLista();
+
+      function desenharLista() {
+        lugarLista.innerHTML = '';
+        var lista = c.mentor ? r.erros : r.erros.filter(function (e) { return !e.corrigido; });
+        var feitos = c.mentor ? [] : r.erros.filter(function (e) { return e.corrigido; });
+        var grupos = agrupar(lista), ordem = grupos.ordem;
+        if (!ordem.length) lugarLista.appendChild(el('div', { class: 'card vazio-card' }, [el('p', { class: 'vazio', text: c.mentor ? 'Nenhum erro registrado ainda.'
+          : feitos.length ? 'Você já corrigiu todos os erros registrados. Eles continuam na sua revisão espaçada.' : 'Nenhum erro registrado ainda. Comece pelo último simulado que você fez.' })]));
+        if (filtroSim && ordem.indexOf(filtroSim) < 0) filtroSim = '';
+        var blocos = [];
+        if (ordem.length > 1) {
+          var filtros = el('div', { class: 'filtros filtro-sim', role: 'group', 'aria-label': 'Filtrar por simulado' });
+          [['', 'Todos', lista.length]].concat(ordem.map(function (k) { return [k, k, grupos.de[k].length]; })).forEach(function (o) {
+            var bt = el('button', { class: 'chip', type: 'button', 'aria-pressed': String(o[0] === filtroSim), title: o[1] }, [o[1], el('b', { text: String(o[2]) })]);
+            bt.onclick = function () { filtroSim = o[0]; desenharLista(); };
+            filtros.appendChild(bt);
+          });
+          lugarLista.appendChild(filtros);
+        }
+        ordem.forEach(function (k, idx) {
+          if (filtroSim && k !== filtroSim) return;
+          var itens = grupos.de[k], n = itens.length, nf = itens.filter(function (e) { return e.corrigido; }).length;
+          var cab = el('button', { class: 'grupo-cab', type: 'button' }, [
+            el('span', { class: 'grupo-nome' }, [el('span', { class: 'seta', 'aria-hidden': 'true' }), el('b', { text: k })]),
+            el('span', { class: 'nota', style: 'margin:0', text: c.mentor ? n + (n === 1 ? ' erro' : ' erros') + (nf ? ' · ' + nf + (nf === 1 ? ' corrigido' : ' corrigidos') : '')
+              : n + (n === 1 ? ' erro para corrigir' : ' erros para corrigir') })]);
+          var corpo = el('div', { class: 'grupo-corpo' });
+          var f = faltamDe(k);
+          if (f && f.length) corpo.appendChild(el('div', { class: 'progresso-areas' }, f.map(function (x) {
+            return el('span', { class: 'tag' + (x.falta ? '' : ' completo'), text: x.nome + ' ' + Math.min(x.registrado, x.esperado) + ' de ' + x.esperado });
+          })));
+          itens.forEach(function (e) { corpo.appendChild(itemErro(e)); });
+          var card = el('div', { class: 'card grupo-sim', 'data-simulado': k }, [cab, corpo]);
+          var abrir = function (v) { card.classList.toggle('aberto', v); cab.setAttribute('aria-expanded', String(v)); };
+          cab.onclick = function () { abrir(!card.classList.contains('aberto')); };
+          abrir(idx === 0 || !!filtroSim);
+          blocos.push(card);
+          lugarLista.appendChild(card);
         });
-        raiz.appendChild(filtros);
+        if (feitos.length) {
+          var ver = el('button', { class: 'link-corrigidos', type: 'button', 'aria-expanded': String(verCorrigidos),
+            text: (verCorrigidos ? 'Esconder' : 'Ver') + ' erros já corrigidos (' + feitos.length + ')' });
+          ver.onclick = function () { verCorrigidos = !verCorrigidos; desenharLista(); };
+          lugarLista.appendChild(ver);
+          if (verCorrigidos) {
+            var caixa = el('div', { class: 'card corrigidos' }, [el('p', { class: 'nota', style: 'margin:0 0 4px', text: 'Já corrigidos. Continuam na sua revisão espaçada. Desmarque se marcou por engano.' })]);
+            var gf = agrupar(feitos);
+            gf.ordem.forEach(function (k) {
+              caixa.appendChild(el('div', { class: 'corrigidos-sim', text: k }));
+              gf.de[k].forEach(function (e) { caixa.appendChild(itemErro(e)); });
+            });
+            lugarLista.appendChild(caixa);
+          }
+        }
+        // O cabeçalho do simulado gruda logo abaixo da barra fixa de alunos (mentor/gestor) enquanto a lista rola
+        var fixo = document.querySelector('.seletor');
+        document.documentElement.style.setProperty('--topo-fixo', (fixo ? fixo.offsetHeight : 0) + 'px');
       }
-      ordem.forEach(function (k, idx) {
-        var n = grupos[k].length;
-        var cab = el('button', { class: 'grupo-cab', type: 'button' }, [
-          el('span', { class: 'grupo-nome' }, [el('span', { class: 'seta', 'aria-hidden': 'true' }), el('b', { text: k })]),
-          el('span', { class: 'nota cont-corr', style: 'margin:0', text: textoContagem(n, grupos[k].filter(function (e) { return e.corrigido; }).length) })]);
-        var corpo = el('div', { class: 'grupo-corpo' });
-        var f = faltamDe(k);
-        if (f && f.length) corpo.appendChild(el('div', { class: 'progresso-areas' }, f.map(function (x) {
-          return el('span', { class: 'tag' + (x.falta ? '' : ' completo'), text: x.nome + ' ' + Math.min(x.registrado, x.esperado) + ' de ' + x.esperado });
-        })));
-        grupos[k].sort(function (a, b) { return (Number(a.questao) || 9999) - (Number(b.questao) || 9999); }).forEach(function (e) { corpo.appendChild(itemErro(e)); });
-        var card = el('div', { class: 'card grupo-sim', 'data-simulado': k }, [cab, corpo]);
-        var abrir = function (v) { card.classList.toggle('aberto', v); cab.setAttribute('aria-expanded', String(v)); };
-        cab.onclick = function () { abrir(!card.classList.contains('aberto')); };
-        abrir(idx === 0);
-        blocos.push({ nome: k, card: card, abrir: abrir });
-        raiz.appendChild(card);
-      });
-      function textoContagem(n, feitos) { return n + (n === 1 ? ' erro' : ' erros') + (feitos ? ' · ' + feitos + (feitos === 1 ? ' corrigido' : ' corrigidos') : ''); }
-      function atualizarContagem(item) {
-        var card = item.closest('.grupo-sim'); if (!card) return;
-        var n = card.querySelectorAll('.check-corr').length, f = card.querySelectorAll('.check-corr[aria-checked="true"]').length;
-        card.querySelector('.cont-corr').textContent = textoContagem(n, f);
+
+      // Agrupa por simulado (o mais recente primeiro) e ordena cada grupo pelo número da questão
+      function agrupar(lista) {
+        var de = {}, ordem = [];
+        lista.slice().reverse().forEach(function (e) { var k = e.simulado || 'Sem simulado'; if (!de[k]) { de[k] = []; ordem.push(k); } de[k].push(e); });
+        ordem.forEach(function (k) { de[k].sort(function (a, b) { return (Number(a.questao) || 9999) - (Number(b.questao) || 9999); }); });
+        return { de: de, ordem: ordem };
       }
-      // O cabeçalho do simulado gruda logo abaixo da barra fixa de alunos (mentor/gestor) enquanto a lista rola
-      var fixo = document.querySelector('.seletor');
-      document.documentElement.style.setProperty('--topo-fixo', (fixo ? fixo.offsetHeight : 0) + 'px');
 
       function itemErro(e) {
         var acoes = el('div', { class: 'acoes' });
@@ -434,14 +462,17 @@ window.Registros = (function () {
         var item = el('div', { class: 'item-erro' + (feito ? ' corrigido' : '') }, [chk, el('span', { class: 'q-num' + (e.questao ? '' : ' sem'), title: 'Número da questão', text: e.questao ? 'Q' + e.questao : 'Q?' }),
           el('span', { class: 'tag', text: e.materia || '—' }), el('span', { class: 'item-txt' }, [el('span', { text: e.parte }), el('small', { text: e.motivo + (feito && c.mentor ? ' · corrigido em ' + e.corrigido : '') })]), acoes]);
         chk.onclick = function () {
-          var novo = chk.getAttribute('aria-checked') !== 'true';
-          var aplicar = function (v) { chk.setAttribute('aria-checked', String(v)); item.classList.toggle('corrigido', v); atualizarContagem(item); };
-          aplicar(novo); chk.disabled = true;
-          c.api('marcarCorrigido', { id: c.id, linha: e.linha, antes: e, corrigido: novo }).then(function (x) {
-            chk.disabled = false;
-            if (!x || !x.ok) { aplicar(!novo); c.aviso(msgErro(x), true); return; }
-            e.corrigido = x.corrigido || ''; chk.title = novo ? 'Corrigido em ' + e.corrigido : 'Marque quando já tiver corrigido';
-          }).catch(function () { chk.disabled = false; aplicar(!novo); c.aviso('Sem conexão. Tente de novo.', true); });
+          // Na hora: o erro sai da lista (ou volta, se desmarcar); se o servidor recusar, desfaz
+          var novo = !e.corrigido, antes = e.corrigido;
+          var dados = { simulado: e.simulado, materia: e.materia, parte: e.parte, questao: e.questao };
+          e.corrigido = novo ? hojeIso().split('-').reverse().join('/') : '';
+          item.classList.add('saindo');
+          setTimeout(desenharLista, 180);
+          if (novo) c.aviso('Corrigido! Sai da lista, mas continua na sua revisão espaçada.');
+          c.api('marcarCorrigido', { id: c.id, linha: e.linha, antes: dados, corrigido: novo }).then(function (x) {
+            if (!x || !x.ok) { e.corrigido = antes; desenharLista(); c.aviso(msgErro(x), true); return; }
+            e.corrigido = x.corrigido || '';
+          }).catch(function () { e.corrigido = antes; desenharLista(); c.aviso('Sem conexão. Tente de novo.', true); });
         };
         ex.onclick = function () {
           confirmarInline(acoes, 'Excluir?', 'Excluir', function () {
