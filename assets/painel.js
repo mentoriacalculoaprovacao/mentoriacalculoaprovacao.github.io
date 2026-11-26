@@ -6,7 +6,7 @@ window.Painel = (function () {
   var AREAS = [['L', 'Linguagens', '#2F6FDE'], ['H', 'Ciências Humanas', '#E07B39'], ['N', 'Ciências da Natureza', '#1E9E6A'], ['M', 'Matemática', '#8E5BD6'], ['R', 'Redação', '#D6457A']];
   // Faixas por área: média de acertos dos últimos 5 simulados que têm a área. Sobe e desce com o momento do aluno.
   // Objetivas: branca até 20 · azul 21–25 · roxa 26–30 · marrom 31–35 · preta 36–45.
-  // Redação: mesma proporção sobre 1000 (21/45, 26/45, 31/45 e 36/45), arredondada para a escala de 40 em 40 pontos.
+  // Redação (sobre 1000): azul a partir de 480, roxa 600, marrom 720 e preta só com 900 ou mais (pedido do Lucas, 26/11).
   var JANELA = 5;
   var FAIXAS = [
     { nome: 'Branca', cor: '#F6F6F2', borda: '#B9C1CC', ponta: '#202226', texto: '#6B7480', costura: 'rgba(16,32,46,.14)' },
@@ -15,7 +15,7 @@ window.Painel = (function () {
     { nome: 'Marrom', cor: '#7B4A2B', borda: '#5C351E', ponta: '#202226', texto: '#7B4A2B', costura: 'rgba(255,255,255,.3)' },
     { nome: 'Preta', cor: '#24262B', borda: '#0F1013', ponta: '#D62828', texto: '#24262B', costura: 'rgba(255,255,255,.22)' }
   ];
-  var MIN_OBJ = [0, 21, 26, 31, 36], MIN_RED = [0, 480, 600, 720, 800], BASE_OBJ = 15, BASE_RED = 320;
+  var MIN_OBJ = [0, 21, 26, 31, 36], MIN_RED = [0, 480, 600, 720, 900], BASE_OBJ = 15, BASE_RED = 320, MAX_OBJ = 45, MAX_RED = 1000;
   var ITENS = [['Matemática', 'M'], ['Física', 'N'], ['Química', 'N'], ['Biologia', 'N'], ['História', 'H'], ['Geografia', 'H'], ['Sociologia', 'H'], ['Filosofia', 'H'], ['Linguagens', 'L'], ['Redação', 'R']];
   var GRUPOS = [['Para reforçar', 'var(--ruim)'], ['No caminho', 'var(--aviso)'], ['Fortes', 'var(--bom)'], ['Avaliando', '#AAB3C0']];
   var NS = 'http://www.w3.org/2000/svg';
@@ -85,10 +85,13 @@ window.Painel = (function () {
     var janela = vals.slice(-JANELA), m = media(janela), i = indiceFaixa(m, mins), prox = i < FAIXAS.length - 1 ? i + 1 : null;
     var base = i === 0 ? (red ? BASE_RED : BASE_OBJ) : mins[i];
     var prog = prox === null ? 1 : Math.max(0, Math.min(1, (m - base) / (mins[prox] - base)));
+    // Graus na ponteira (0 a 4): quanto da faixa atual já foi percorrido; na preta, até o máximo da prova
+    var teto = prox === null ? (red ? MAX_RED : MAX_OBJ) : mins[prox];
+    var graus = Math.max(0, Math.min(4, Math.floor(5 * (m - base) / Math.max(1e-9, teto - base))));
     // Comparação com a média de antes do último simulado: mostra se subiu ou desceu de faixa
     var antes = vals.length >= 2 ? indiceFaixa(media(vals.slice(0, -1).slice(-JANELA)), mins) : i;
     return { area: nome, n: janela.length, total: vals.length, media: m, idx: i, faixa: FAIXAS[i], prox: prox === null ? null : FAIXAS[prox],
-      falta: prox === null ? 0 : mins[prox] - m, prog: prog, mudou: i - antes, de: FAIXAS[antes], redacao: red };
+      falta: prox === null ? 0 : mins[prox] - m, prog: prog, graus: graus, mudou: i - antes, de: FAIXAS[antes], redacao: red };
   }
 
   function intervir(sims, erros) {
@@ -110,24 +113,27 @@ window.Painel = (function () {
     });
   }
 
-  // ---------- Desenho: faixa amarrada (nó e duas pontas; a ponta é preta, e vermelha na faixa preta) ----------
-  function faixaSvg(f, pequena) {
-    var svg = sv('svg', { viewBox: '0 0 140 92', role: 'img', 'aria-label': 'Faixa ' + f.nome.toLowerCase(), class: pequena ? 'faixa-mini' : 'faixa-svg' });
-    var lerp = function (p, q, t) { return [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]; };
-    var ponta = function (A, B, C, D) {
-      sv('polygon', { points: [A, B, C, D].map(function (p) { return p.join(','); }).join(' '), fill: f.cor, stroke: f.borda, 'stroke-width': 1.4, 'stroke-linejoin': 'round' }, svg);
-      var t1 = 0.58, t2 = 0.8;
-      sv('polygon', { points: [lerp(A, D, t1), lerp(B, C, t1), lerp(B, C, t2), lerp(A, D, t2)].map(function (p) { return p.join(','); }).join(' '), fill: f.ponta }, svg);
-    };
-    ponta([60, 40], [71, 40], [55, 86], [42, 83]);
-    ponta([70, 40], [81, 40], [99, 83], [86, 86]);
-    sv('rect', { x: 5, y: 22, width: 130, height: 19, rx: 4, fill: f.cor, stroke: f.borda, 'stroke-width': 1.4 }, svg);
-    sv('line', { x1: 11, x2: 129, y1: 27, y2: 27, stroke: f.costura, 'stroke-width': 1, 'stroke-dasharray': '3 2.5' }, svg);
-    sv('line', { x1: 11, x2: 129, y1: 36, y2: 36, stroke: f.costura, 'stroke-width': 1, 'stroke-dasharray': '3 2.5' }, svg);
-    sv('rect', { x: 5, y: 22, width: 130, height: 8, rx: 4, fill: '#fff', 'fill-opacity': 0.13 }, svg);
-    sv('rect', { x: 56, y: 15, width: 29, height: 32, rx: 6, fill: f.cor, stroke: f.borda, 'stroke-width': 1.4 }, svg);
-    sv('path', { d: 'M60 20 L81 42', stroke: f.borda, 'stroke-width': 1.3, 'stroke-opacity': 0.55 }, svg);
-    sv('rect', { x: 56, y: 15, width: 29, height: 12, rx: 6, fill: '#fff', 'fill-opacity': 0.12 }, svg);
+  // ---------- Desenho: faixa de jiu-jítsu esticada, com costuras e a ponteira na borda direita ----------
+  // A ponteira é preta (vermelha na faixa preta) e recebe as listras brancas dos graus: cada grau = 1/5 do caminho
+  // até a próxima faixa (na preta, até o máximo da prova).
+  function faixaSvg(f, pequena, graus) {
+    var W = 150, H = 38, x0 = 2, y0 = 4, w = W - 5, h = 29;
+    var svg = sv('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img', 'aria-label': 'Faixa ' + f.nome.toLowerCase() + (graus ? ', ' + graus + (graus === 1 ? ' grau' : ' graus') : ''), class: pequena ? 'faixa-mini' : 'faixa-svg' });
+    sv('rect', { x: x0 + 1, y: y0 + 2.5, width: w, height: h, rx: 3, fill: '#10202E', 'fill-opacity': 0.12 }, svg); // sombra
+    sv('rect', { x: x0, y: y0, width: w, height: h, rx: 3, fill: f.cor, stroke: f.borda, 'stroke-width': 1.2 }, svg);
+    var px = x0 + w - 44, pw = 34; // ponteira perto da ponta, como na faixa de verdade
+    if (!pequena) for (var k = 1; k <= 5; k++) { // costuras (pespontos) ao longo da faixa, interrompidas na ponteira
+      var y = y0 + k * h / 6;
+      sv('line', { x1: x0 + 5, x2: px - 3, y1: y, y2: y, stroke: f.costura, 'stroke-width': 0.9, 'stroke-dasharray': '2.6 2' }, svg);
+      sv('line', { x1: px + pw + 3, x2: x0 + w - 4, y1: y, y2: y, stroke: f.costura, 'stroke-width': 0.9, 'stroke-dasharray': '2.6 2' }, svg);
+    }
+    var preta = f.nome === 'Preta';
+    if (preta) sv('rect', { x: px - 2.5, y: y0, width: pw + 5, height: h, fill: '#FFFFFF' }, svg); // a ponteira vermelha tem bordas brancas
+    sv('rect', { x: px, y: y0, width: pw, height: h, fill: f.ponta }, svg);
+    var g = Math.max(0, Math.min(4, graus || 0));
+    for (var i = 0; i < g; i++) sv('rect', { x: px + pw - 7.5 - i * 7.5, y: y0, width: 3, height: h, fill: '#FFFFFF' }, svg);
+    sv('rect', { x: x0, y: y0, width: w, height: 7, rx: 3, fill: '#FFFFFF', 'fill-opacity': 0.14 }, svg); // brilho do tecido
+    sv('rect', { x: x0, y: y0, width: w, height: h, rx: 3, fill: 'none', stroke: f.borda, 'stroke-width': 1.2 }, svg);
     return svg;
   }
   function num(v, red) { return red ? String(Math.round(v)) : (Math.round(v * 10) / 10).toFixed(1).replace('.', ',').replace(',0', ''); }
@@ -217,13 +223,13 @@ window.Painel = (function () {
       var barra = nv.prox ? el('div', { class: 'nv-barra', title: Math.round(nv.prog * 100) + '% do caminho até a faixa ' + nv.prox.nome.toLowerCase() }, [el('span', { style: 'width:' + Math.round(nv.prog * 100) + '%;background:' + nv.prox.cor + (nv.prox.nome === 'Branca' ? ';box-shadow:inset 0 0 0 1px #B9C1CC' : '') })]) : null;
       var falta = nv.prox ? 'faltam ' + num(nv.falta, nv.redacao) + ' ' + un + ' de média para a ' + nv.prox.nome.toLowerCase() : 'faixa máxima!';
       var mudou = nv.mudou > 0 ? el('span', { class: 'nv-mudou sobe', text: '↑ subiu da ' + nv.de.nome.toLowerCase() }) : nv.mudou < 0 ? el('span', { class: 'nv-mudou desce', text: '↓ desceu da ' + nv.de.nome.toLowerCase() }) : null;
-      gradeNv.appendChild(el('div', { class: 'card nv' }, [faixaSvg(nv.faixa), el('span', { class: 'nv-area', text: nv.area }),
-        el('span', { class: 'nv-metal', style: 'color:' + nv.faixa.texto, text: 'Faixa ' + nv.faixa.nome.toLowerCase() }), mudou,
+      gradeNv.appendChild(el('div', { class: 'card nv' }, [faixaSvg(nv.faixa, false, nv.graus), el('span', { class: 'nv-area', text: nv.area }),
+        el('span', { class: 'nv-metal', style: 'color:' + nv.faixa.texto, text: 'Faixa ' + nv.faixa.nome.toLowerCase() }), nv.graus ? el('span', { class: 'nv-graus', text: nv.graus + (nv.graus === 1 ? ' grau' : ' graus') }) : null, mudou,
         el('span', { class: 'nv-prog', text: med }), barra, el('span', { class: 'nv-prog', text: falta })]));
     });
     var trilha = el('ul', { class: 'trilha' });
     FAIXAS.forEach(function (f, k) { var ate = k < 4 ? MIN_OBJ[k + 1] - 1 : 45; trilha.appendChild(el('li', {}, [faixaSvg(f, true), el('b', { text: f.nome }), ' ' + (k ? MIN_OBJ[k] + '–' + ate : 'até ' + ate)])); });
-    raiz.appendChild(el('div', { class: 'card' }, [gradeNv, el('p', { class: 'nota', text: 'A faixa é a média de acertos ' + (M ? 'do aluno' : 'dos seus') + ' nos últimos 5 simulados de cada área: ela sobe e desce com o momento ' + (M ? 'dele' : 'em que você está') + '. Na redação, a mesma proporção sobre 1000 (azul a partir de 480, roxa 600, marrom 720, preta 800).' }), el('div', { style: 'margin-top:10px' }, [trilha])]));
+    raiz.appendChild(el('div', { class: 'card' }, [gradeNv, el('p', { class: 'nota', text: 'A faixa é a média de acertos ' + (M ? 'do aluno' : 'dos seus') + ' nos últimos 5 simulados de cada área: ela sobe e desce com o momento ' + (M ? 'dele' : 'em que você está') + '. Cada listra branca na ponteira é um grau: um quinto do caminho até a próxima faixa. Na redação: azul a partir de 480, roxa 600, marrom 720 e preta com 900 ou mais.' }), el('div', { style: 'margin-top:10px' }, [trilha])]));
 
     // Evolução
     raiz.appendChild(el('div', { class: 'sec', text: M ? 'Evolução' : 'Sua evolução' }));

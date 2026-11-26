@@ -210,6 +210,8 @@ function novoServidor(){
   await p.setViewportSize({width:390,height:900});await p.waitForTimeout(200);
   await p.screenshot({path:__dirname+'/aluno_rotina_celular.png',fullPage:true});
   await p.click('.caixa:has-text("Meu painel")');await p.waitForTimeout(300);
+  const fx=await p.$$eval('.nv .faixa-svg',l=>l.map(x=>x.getAttribute('aria-label')));
+  ok(fx.length>=1&&fx.every(x=>/^Faixa (branca|azul|roxa|marrom|preta)/.test(x))&&(await p.$$('.trilha svg')).length===5,'painel mostra as faixas (com ponteira) e a trilha das 5 faixas '+fx.join(';'));
   await p.screenshot({path:__dirname+'/aluno_celular.png'});
   ok(erros.length===0,'aluno: sem erros de JavaScript '+erros.join(';'));await p.close();}
  // ---------- Mentor ----------
