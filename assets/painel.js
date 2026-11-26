@@ -1,15 +1,21 @@
-// Painel visual do aluno: cálculos (níveis, onde intervir) e desenho (barras de metal, gráfico, cartões).
+// Painel visual do aluno: cálculos (faixas, onde intervir) e desenho (faixas, gráfico, cartões).
 // Usado pelo app.js nas três visões (aluno, mentor e gestor). Não faz chamadas ao servidor.
 
 window.Painel = (function () {
-  var META_ACERTO = 0.6, META_RED = 900, PRECISA = 4;
+  var META_ACERTO = 0.6, META_RED = 900;
   var AREAS = [['L', 'Linguagens', '#2F6FDE'], ['H', 'Ciências Humanas', '#E07B39'], ['N', 'Ciências da Natureza', '#1E9E6A'], ['M', 'Matemática', '#8E5BD6'], ['R', 'Redação', '#D6457A']];
-  var METAIS = ['Ferro', 'Cobre', 'Prata', 'Ouro', 'Diamante'];
-  var SIMB = { Ferro: 'Fe', Cobre: 'Cu', Prata: 'Ag', Ouro: 'Au', Diamante: 'C' };
-  var COR = { Ferro: ['#3c4249', '#b3bcc6', '#5d656e', '#f1f4f7'], Cobre: ['#6e3418', '#f4ab7e', '#b4642f', '#fff5ee'], Prata: ['#77808a', '#ffffff', '#b8c0c7', '#2b3238'], Ouro: ['#8a5a0c', '#fff0a8', '#d9a52f', '#4a3000'], Diamante: ['#3fb3e0', '#f5fdff', '#9fe0f5', '#0b4560'] };
-  var TEXTO_METAL = { Ferro: '#5d656e', Cobre: '#b4642f', Prata: '#8a939b', Ouro: '#b8861a', Diamante: '#2a9fd0' };
-  var ARTIGO = { Ferro: 'ao', Cobre: 'ao', Prata: 'à', Ouro: 'ao', Diamante: 'ao' };
-  var CORTE_OBJ = [0, 10, 19, 28, 37], CORTE_RED = [0, 201, 401, 601, 801];
+  // Faixas por área: média de acertos dos últimos 5 simulados que têm a área. Sobe e desce com o momento do aluno.
+  // Objetivas: branca até 20 · azul 21–25 · roxa 26–30 · marrom 31–35 · preta 36–45.
+  // Redação: mesma proporção sobre 1000 (21/45, 26/45, 31/45 e 36/45), arredondada para a escala de 40 em 40 pontos.
+  var JANELA = 5;
+  var FAIXAS = [
+    { nome: 'Branca', cor: '#F6F6F2', borda: '#B9C1CC', ponta: '#202226', texto: '#6B7480', costura: 'rgba(16,32,46,.14)' },
+    { nome: 'Azul', cor: '#2F6BDE', borda: '#1F52B5', ponta: '#202226', texto: '#2F6BDE', costura: 'rgba(255,255,255,.35)' },
+    { nome: 'Roxa', cor: '#7E3BC9', borda: '#6129A6', ponta: '#202226', texto: '#7E3BC9', costura: 'rgba(255,255,255,.35)' },
+    { nome: 'Marrom', cor: '#7B4A2B', borda: '#5C351E', ponta: '#202226', texto: '#7B4A2B', costura: 'rgba(255,255,255,.3)' },
+    { nome: 'Preta', cor: '#24262B', borda: '#0F1013', ponta: '#D62828', texto: '#24262B', costura: 'rgba(255,255,255,.22)' }
+  ];
+  var MIN_OBJ = [0, 21, 26, 31, 36], MIN_RED = [0, 480, 600, 720, 800], BASE_OBJ = 15, BASE_RED = 320;
   var ITENS = [['Matemática', 'M'], ['Física', 'N'], ['Química', 'N'], ['Biologia', 'N'], ['História', 'H'], ['Geografia', 'H'], ['Sociologia', 'H'], ['Filosofia', 'H'], ['Linguagens', 'L'], ['Redação', 'R']];
   var GRUPOS = [['Para reforçar', 'var(--ruim)'], ['No caminho', 'var(--aviso)'], ['Fortes', 'var(--bom)'], ['Avaliando', '#AAB3C0']];
   var NS = 'http://www.w3.org/2000/svg';
@@ -70,19 +76,19 @@ window.Painel = (function () {
       .sort(function (a, b) { return b.n - a.n || a.rotulo.localeCompare(b.rotulo, 'pt-BR'); });
   }
 
+  function indiceFaixa(v, mins) { var f = 0; mins.forEach(function (m, i) { if (v >= m - 1e-9) f = i; }); return f; }
+  function media(l) { return l.reduce(function (t, x) { return t + x; }, 0) / l.length; }
   function nivel(sims, k, nome) {
-    var corte = k === 'R' ? CORTE_RED : CORTE_OBJ;
-    var vals = sims.filter(function (s) { return ok(s[k]); }).map(function (s) { return { prova: s.prova, v: Number(s[k]) }; });
-    var faixa = function (v) { var f = 0; corte.forEach(function (c, i) { if (v >= c) f = i; }); return f; };
-    var n = 0;
-    for (var j = 4; j >= 1; j--) if (vals.filter(function (x) { return faixa(x.v) >= j; }).length >= PRECISA) { n = j; break; }
-    var piso = corte[n], prox = n < 4 ? n + 1 : null, prog = prox === null ? 1 : 0, naFaixa = 0;
-    for (var t = n + 1; t <= 4; t++) {
-      var partes = vals.map(function (x) { return Math.max(0, Math.min(1, (x.v - piso) / (corte[t] - piso))); }).sort(function (a, b) { return b - a; }).slice(0, PRECISA);
-      var p = partes.reduce(function (s, x) { return s + x; }, 0) / PRECISA;
-      if (p > 0 && p >= prog - 1e-9) { prox = t; prog = p; naFaixa = vals.filter(function (x) { return faixa(x.v) >= t; }).length; }
-    }
-    return { area: nome, metal: METAIS[n], rumo: prox === null ? null : METAIS[prox], corte: prox === null ? null : corte[prox], naFaixa: Math.min(naFaixa, PRECISA), prog: prog, n: vals.length, redacao: k === 'R', hist: vals };
+    var red = k === 'R', mins = red ? MIN_RED : MIN_OBJ;
+    var vals = sims.filter(function (s) { return ok(s[k]); }).map(function (s) { return Number(s[k]); });
+    if (!vals.length) return { area: nome, n: 0, redacao: red };
+    var janela = vals.slice(-JANELA), m = media(janela), i = indiceFaixa(m, mins), prox = i < FAIXAS.length - 1 ? i + 1 : null;
+    var base = i === 0 ? (red ? BASE_RED : BASE_OBJ) : mins[i];
+    var prog = prox === null ? 1 : Math.max(0, Math.min(1, (m - base) / (mins[prox] - base)));
+    // Comparação com a média de antes do último simulado: mostra se subiu ou desceu de faixa
+    var antes = vals.length >= 2 ? indiceFaixa(media(vals.slice(0, -1).slice(-JANELA)), mins) : i;
+    return { area: nome, n: janela.length, total: vals.length, media: m, idx: i, faixa: FAIXAS[i], prox: prox === null ? null : FAIXAS[prox],
+      falta: prox === null ? 0 : mins[prox] - m, prog: prog, mudou: i - antes, de: FAIXAS[antes], redacao: red };
   }
 
   function intervir(sims, erros) {
@@ -104,53 +110,27 @@ window.Painel = (function () {
     });
   }
 
-  // ---------- Desenho: barra de metal (ou diamante) com anel de progresso ----------
-  function selo(metal, progresso, metalAnel, idx) {
-    var c = COR[metal], id = 'nv' + Math.random().toString(36).slice(2, 8), dia = metal === 'Diamante';
-    var svg = sv('svg', { viewBox: '0 0 120 120', role: 'img', 'aria-label': metal });
-    var defs = sv('defs', {}, svg);
-    var grad = function (gid, x1, y1, x2, y2, stops) { var g = sv('linearGradient', { id: id + gid, x1: x1, y1: y1, x2: x2, y2: y2 }, defs); stops.forEach(function (s) { sv('stop', { offset: s[0], style: 'stop-color:' + s[1] }, g); }); };
-    grad('a', 0, 0, 1, 1, [[0, c[1]], [0.32, c[2]], [0.5, c[0]], [0.68, c[2]], [1, c[1]]]);
-    grad('f', 0, 0, 0, 1, [[0, c[2]], [0.45, c[2]], [1, c[0]]]);
-    var rg = sv('radialGradient', { id: id + 'c', cx: 0.35, cy: 0.3, r: 0.7 }, defs);
-    sv('stop', { offset: 0, style: 'stop-color:rgba(255,255,255,0.55)' }, rg); sv('stop', { offset: 0.6, style: 'stop-color:rgba(255,255,255,0)' }, rg);
-    var formaGema = 'M44 34 L76 34 L90 50 L60 92 L30 50 Z', escGema = 'translate(60,63) scale(1.16) translate(-60,-63)';
-    var contorno = 'M40 46 L80 46 L86 56 L92 76 L28 76 L34 56 Z', escBarra = 'translate(60,61) scale(1.3) translate(-60,-61)';
-    var clip = sv('clipPath', { id: id + 'k' }, defs);
-    sv('path', { d: dia ? formaGema : contorno, transform: dia ? escGema : escBarra }, clip);
-    if (progresso !== null && progresso !== undefined) {
-      var R = 54, C = 2 * Math.PI * R, ca = COR[metalAnel] || c, p = Math.max(0, Math.min(1, progresso));
-      sv('circle', { cx: 60, cy: 60, r: R, fill: 'none', stroke: '#E2E6EE', 'stroke-width': 7 }, svg);
-      if (p > 0) sv('circle', { cx: 60, cy: 60, r: R, fill: 'none', stroke: ca[2], 'stroke-width': 7, 'stroke-linecap': p >= 1 ? 'butt' : 'round', 'stroke-dasharray': (C * p) + ' ' + C, transform: 'rotate(-90 60 60)' }, svg);
-      for (var q = 0; q < PRECISA; q++) { var an = -Math.PI / 2 + q * 2 * Math.PI / PRECISA; sv('line', { x1: 60 + (R - 5) * Math.cos(an), y1: 60 + (R - 5) * Math.sin(an), x2: 60 + (R + 5) * Math.cos(an), y2: 60 + (R + 5) * Math.sin(an), stroke: '#FFFFFF', 'stroke-width': 2.2 }, svg); }
-      var ang = -Math.PI / 2 + 2 * Math.PI * (p >= 1 ? 0 : p), ex = 60 + R * Math.cos(ang), ey = 60 + R * Math.sin(ang), txt = Math.round(p * 100) + '%', w = txt.length * 6.6 + 9;
-      var g = sv('g', { transform: 'translate(' + ex + ',' + ey + ')' }, svg);
-      sv('rect', { x: -w / 2, y: -8, width: w, height: 16, rx: 8, fill: p > 0 ? ca[2] : '#FFFFFF', stroke: p > 0 ? '#FFFFFF' : '#D5DAE3', 'stroke-width': 1.5 }, g);
-      sv('text', { 'text-anchor': 'middle', 'dominant-baseline': 'central', y: 0.5, style: 'font-size:10px;font-weight:700;fill:' + (p > 0 ? ca[3] : '#5D6B7E'), text: txt }, g);
-    }
-    sv('ellipse', dia ? { cx: 60, cy: 100, rx: 20, ry: 3, fill: '#000', 'fill-opacity': 0.12 } : { cx: 60, cy: 83, rx: 40, ry: 3.6, fill: '#000', 'fill-opacity': 0.14 }, svg);
-    var f = sv('g', { class: 'flutua', style: 'animation-delay:' + (idx || 0) * 0.6 + 's' }, svg);
-    if (dia) {
-      var gm = sv('g', { transform: escGema }, f);
-      [['30,50 44,34 52,50', c[1]], ['44,34 60,34 52,50', '#ffffff'], ['60,34 76,34 68,50', c[1]], ['60,34 52,50 68,50', c[2]], ['76,34 90,50 68,50', c[2]], ['30,50 52,50 60,92', c[2]], ['52,50 68,50 60,92', c[1]], ['68,50 90,50 60,92', c[0]]]
-        .forEach(function (x) { sv('polygon', { points: x[0], fill: x[1], stroke: '#ffffff', 'stroke-opacity': 0.7, 'stroke-width': 0.8, 'stroke-linejoin': 'round' }, gm); });
-      sv('path', { d: formaGema, fill: 'url(#' + id + 'c)', stroke: c[0], 'stroke-width': 1.2, 'stroke-linejoin': 'round' }, gm);
-    } else {
-      var b = sv('g', { transform: escBarra }, f);
-      sv('path', { d: 'M34 56 L86 56 L92 76 L28 76 Z', fill: 'url(#' + id + 'f)', stroke: c[0], 'stroke-width': 0.8, 'stroke-linejoin': 'round' }, b);
-      sv('path', { d: 'M40 46 L80 46 L86 56 L34 56 Z', fill: 'url(#' + id + 'a)', stroke: c[0], 'stroke-width': 0.8, 'stroke-linejoin': 'round' }, b);
-      sv('path', { d: 'M34.6 56 L85.4 56', stroke: c[1], 'stroke-width': 1, 'stroke-opacity': 0.9 }, b);
-      sv('path', { d: 'M40 46 L80 46 L86 56 L34 56 Z', fill: 'url(#' + id + 'c)' }, b);
-      sv('text', { x: 60.5, y: 66.6, 'text-anchor': 'middle', 'dominant-baseline': 'central', style: 'font-size:14px;font-weight:800;fill:#000;opacity:.25', text: SIMB[metal] }, b);
-      sv('text', { x: 60, y: 66, 'text-anchor': 'middle', 'dominant-baseline': 'central', style: 'font-size:14px;font-weight:800;fill:' + c[3], text: SIMB[metal] }, b);
-    }
-    var br = sv('g', { 'clip-path': 'url(#' + id + 'k)' }, f);
-    sv('rect', { class: 'brilho', x: 0, y: 0, width: 16, height: 120, fill: '#ffffff', 'fill-opacity': 0.55, style: 'animation-delay:' + (idx || 0) * 0.9 + 's' }, br);
-    if (metal === 'Ouro' || dia) [[24, 30, 0], [96, 34, 0.8], [90, 92, 1.6], [28, 86, 2.2]].forEach(function (s, i) {
-      sv('path', { class: 'faisca', transform: 'translate(' + s[0] + ',' + s[1] + ') scale(' + (i % 2 ? 0.8 : 1.1) + ')', d: 'M0,-6 L1.4,-1.4 L6,0 L1.4,1.4 L0,6 L-1.4,1.4 L-6,0 L-1.4,-1.4 Z', fill: dia ? '#4cc0ec' : '#f2b315', style: 'animation-delay:' + (s[2] + (idx || 0) * 0.3) + 's' }, svg);
-    });
+  // ---------- Desenho: faixa amarrada (nó e duas pontas; a ponta é preta, e vermelha na faixa preta) ----------
+  function faixaSvg(f, pequena) {
+    var svg = sv('svg', { viewBox: '0 0 140 92', role: 'img', 'aria-label': 'Faixa ' + f.nome.toLowerCase(), class: pequena ? 'faixa-mini' : 'faixa-svg' });
+    var lerp = function (p, q, t) { return [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]; };
+    var ponta = function (A, B, C, D) {
+      sv('polygon', { points: [A, B, C, D].map(function (p) { return p.join(','); }).join(' '), fill: f.cor, stroke: f.borda, 'stroke-width': 1.4, 'stroke-linejoin': 'round' }, svg);
+      var t1 = 0.58, t2 = 0.8;
+      sv('polygon', { points: [lerp(A, D, t1), lerp(B, C, t1), lerp(B, C, t2), lerp(A, D, t2)].map(function (p) { return p.join(','); }).join(' '), fill: f.ponta }, svg);
+    };
+    ponta([60, 40], [71, 40], [55, 86], [42, 83]);
+    ponta([70, 40], [81, 40], [99, 83], [86, 86]);
+    sv('rect', { x: 5, y: 22, width: 130, height: 19, rx: 4, fill: f.cor, stroke: f.borda, 'stroke-width': 1.4 }, svg);
+    sv('line', { x1: 11, x2: 129, y1: 27, y2: 27, stroke: f.costura, 'stroke-width': 1, 'stroke-dasharray': '3 2.5' }, svg);
+    sv('line', { x1: 11, x2: 129, y1: 36, y2: 36, stroke: f.costura, 'stroke-width': 1, 'stroke-dasharray': '3 2.5' }, svg);
+    sv('rect', { x: 5, y: 22, width: 130, height: 8, rx: 4, fill: '#fff', 'fill-opacity': 0.13 }, svg);
+    sv('rect', { x: 56, y: 15, width: 29, height: 32, rx: 6, fill: f.cor, stroke: f.borda, 'stroke-width': 1.4 }, svg);
+    sv('path', { d: 'M60 20 L81 42', stroke: f.borda, 'stroke-width': 1.3, 'stroke-opacity': 0.55 }, svg);
+    sv('rect', { x: 56, y: 15, width: 29, height: 12, rx: 6, fill: '#fff', 'fill-opacity': 0.12 }, svg);
     return svg;
   }
+  function num(v, red) { return red ? String(Math.round(v)) : (Math.round(v * 10) / 10).toFixed(1).replace('.', ',').replace(',0', ''); }
 
   // ---------- Gráfico de evolução (curvas suaves que passam pelos pontos) ----------
   function curva(pts) {
@@ -227,16 +207,23 @@ window.Painel = (function () {
       kpi('#1E8E5A', 'rgba(30,142,90,.12)', ['M4 5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2z', 'M9 8l6 6M15 8l-6 6'], 'Erros no caderno', String(d.erros.length), '', d.erros.length ? 'mais em ' + (r.temas.length ? r.temas[0].rotulo : r.topMateria) + (r.ult ? ' · ' + r.errosUlt + ' do último simulado' : '') : (M ? 'caderno de erros ainda vazio' : 'registre os erros de cada simulado'))
     ]));
 
-    // Níveis
-    raiz.appendChild(el('div', { class: 'sec', text: M ? 'Níveis por área' : 'Seus níveis por área' }));
-    var trilha = el('ul', { class: 'trilha' });
-    METAIS.forEach(function (m, k) { var ate = k < 4 ? CORTE_OBJ[k + 1] - 1 : 45; trilha.appendChild(el('li', {}, [selo(m, null, m, k), el('b', { text: m }), ' ' + CORTE_OBJ[k] + '–' + ate])); });
+    // Faixas
+    raiz.appendChild(el('div', { class: 'sec', text: M ? 'Faixas por área' : 'Suas faixas por área' }));
     var gradeNv = el('div', { class: 'niveis' });
-    r.niveis.forEach(function (nv, i) {
-      var txt = !nv.n ? 'nenhum simulado desta área ainda' : !nv.rumo ? 'nível máximo!' : nv.naFaixa + ' de ' + PRECISA + ' simulados com ' + nv.corte + '+ ' + (nv.redacao ? 'pontos' : 'acertos') + ' rumo ' + ARTIGO[nv.rumo] + ' ' + nv.rumo;
-      gradeNv.appendChild(el('div', { class: 'card nv' }, [selo(nv.metal, nv.prog, nv.rumo || nv.metal, i), el('span', { class: 'nv-area', text: nv.area }), el('span', { class: 'nv-metal', style: 'color:' + TEXTO_METAL[nv.metal], text: nv.metal }), el('span', { class: 'nv-prog', text: txt })]));
+    r.niveis.forEach(function (nv) {
+      if (!nv.n) { gradeNv.appendChild(el('div', { class: 'card nv vazio-nv' }, [faixaSvg(FAIXAS[0]), el('span', { class: 'nv-area', text: nv.area }), el('span', { class: 'nv-metal', style: 'color:#9AA4B2', text: 'Sem faixa' }), el('span', { class: 'nv-prog', text: 'nenhum simulado desta área ainda' })])); return; }
+      var un = nv.redacao ? 'pontos' : 'acertos';
+      var med = 'média ' + num(nv.media, nv.redacao) + (nv.n === 1 ? ' no último simulado' : ' nos últimos ' + nv.n);
+      var barra = nv.prox ? el('div', { class: 'nv-barra', title: Math.round(nv.prog * 100) + '% do caminho até a faixa ' + nv.prox.nome.toLowerCase() }, [el('span', { style: 'width:' + Math.round(nv.prog * 100) + '%;background:' + nv.prox.cor + (nv.prox.nome === 'Branca' ? ';box-shadow:inset 0 0 0 1px #B9C1CC' : '') })]) : null;
+      var falta = nv.prox ? 'faltam ' + num(nv.falta, nv.redacao) + ' ' + un + ' de média para a ' + nv.prox.nome.toLowerCase() : 'faixa máxima!';
+      var mudou = nv.mudou > 0 ? el('span', { class: 'nv-mudou sobe', text: '↑ subiu da ' + nv.de.nome.toLowerCase() }) : nv.mudou < 0 ? el('span', { class: 'nv-mudou desce', text: '↓ desceu da ' + nv.de.nome.toLowerCase() }) : null;
+      gradeNv.appendChild(el('div', { class: 'card nv' }, [faixaSvg(nv.faixa), el('span', { class: 'nv-area', text: nv.area }),
+        el('span', { class: 'nv-metal', style: 'color:' + nv.faixa.texto, text: 'Faixa ' + nv.faixa.nome.toLowerCase() }), mudou,
+        el('span', { class: 'nv-prog', text: med }), barra, el('span', { class: 'nv-prog', text: falta })]));
     });
-    raiz.appendChild(el('div', { class: 'card' }, [gradeNv, el('p', { class: 'nota', text: 'Cada metal é uma faixa de 9 acertos (na redação, 200 pontos). ' + (M ? 'O aluno sobe' : 'Você sobe') + ' quando atinge a faixa em 4 simulados, sem precisar ser seguidos, e o nível conquistado não cai. A porcentagem mostra o quanto falta: cada simulado conta pelo quanto chegou perto do próximo metal.' }), el('div', { style: 'margin-top:10px' }, [trilha])]));
+    var trilha = el('ul', { class: 'trilha' });
+    FAIXAS.forEach(function (f, k) { var ate = k < 4 ? MIN_OBJ[k + 1] - 1 : 45; trilha.appendChild(el('li', {}, [faixaSvg(f, true), el('b', { text: f.nome }), ' ' + (k ? MIN_OBJ[k] + '–' + ate : 'até ' + ate)])); });
+    raiz.appendChild(el('div', { class: 'card' }, [gradeNv, el('p', { class: 'nota', text: 'A faixa é a média de acertos ' + (M ? 'do aluno' : 'dos seus') + ' nos últimos 5 simulados de cada área: ela sobe e desce com o momento ' + (M ? 'dele' : 'em que você está') + '. Na redação, a mesma proporção sobre 1000 (azul a partir de 480, roxa 600, marrom 720, preta 800).' }), el('div', { style: 'margin-top:10px' }, [trilha])]));
 
     // Evolução
     raiz.appendChild(el('div', { class: 'sec', text: M ? 'Evolução' : 'Sua evolução' }));

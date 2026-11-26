@@ -510,15 +510,26 @@ window.Registros = (function () {
   }
 
   // ===================== Rotina =====================
-  // Grade de 7 colunas fixas (segunda a domingo) e linhas livres. Só o mentor cadastrado do aluno edita (o servidor confere);
-  // aluno e gestor só veem.
-  var PALETA = [['', 'Sem cor'], ['#ff0000', 'Vermelho'], ['#ff9900', 'Laranja'], ['#ffff00', 'Amarelo'], ['#00ff00', 'Verde'],
-    ['#4a86e8', 'Azul'], ['#9900ff', 'Roxo'], ['#ff00ff', 'Rosa'], ['#0b2545', 'Azul-marinho'],
-    ['#f4cccc', 'Vermelho claro'], ['#fce5cd', 'Laranja claro'], ['#fff2cc', 'Amarelo claro'], ['#d9ead3', 'Verde claro'],
-    ['#c9daf8', 'Azul claro'], ['#d9d2e9', 'Roxo claro'], ['#ead1dc', 'Rosa claro'], ['#e0e0e0', 'Cinza']];
+  // Grade de hora em hora × Segunda a Domingo, preenchida com atividades prontas. O mentor escolhe a atividade (ela vai
+  // "na mão" do mouse) e clica ou arrasta nos horários: horário vago recebe a atividade; ocupado é trocado por ela.
+  // Cada bloco aceita um detalhe (ex.: a disciplina) e a hora em que termina de verdade (ex.: até 19:30).
+  // Só o mentor cadastrado do aluno edita (o servidor confere); aluno e gestor só veem.
+  // Tipos: [id, nome, fundo, texto]. O servidor (Código.gs, ROTINA_TIPOS) usa a mesma lista: mude nos dois lugares.
+  var TIPOS_ROTINA = [
+    ['sono', 'Sono', '#cdebfa', '#0b4f71'], ['escola', 'Escola/cursinho', '#cbd5e1', '#1e293b'],
+    ['translado', 'Translado', '#e5e7eb', '#374151'], ['treino', 'Treino', '#86efac', '#14532d'],
+    ['aula', 'Aula', '#c7d2fe', '#312e81'], ['combo', 'Combo aula + questões', '#7c3aed', '#ffffff'],
+    ['questoes', 'Questões', '#a5f3fc', '#164e63'], ['consolidacao', 'Consolidação', '#5eead4', '#134e4a'],
+    ['revisao', 'Revisão', '#fdba74', '#7c2d12'], ['simulado', 'Simulado', '#d946ef', '#ffffff'],
+    ['correcao', 'Correção de simulado', '#f5d0fe', '#701a75'], ['redacao', 'Redação', '#fda4af', '#881337'],
+    ['refeicao', 'Refeição/pausa', '#ffedd5', '#9a3412'], ['lazer', 'Lazer', '#fef08a', '#713f12'],
+    ['outro', 'Outro', '#f1f5f9', '#334155']
+  ];
+  var TIPO = {}; TIPOS_ROTINA.forEach(function (t) { TIPO[t[0]] = t; });
+  var HORA_INI = 6, HORA_FIM = 23;
   var NOMES_DIAS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
   var rotinaSuja = false;
-  function corTexto(fundo) { // mesmo critério da planilha (contraste WCAG)
+  function corTexto(fundo) { // mesmo critério da planilha (contraste WCAG), usado no formato anterior
     var c = String(fundo || '').toLowerCase();
     if (!/^#[0-9a-f]{6}$/.test(c)) return '';
     var lin = function (k) { var v = parseInt(c.substr(k, 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
@@ -526,8 +537,22 @@ window.Registros = (function () {
   }
   function pintar(no, cor) { no.style.background = cor || ''; no.style.color = cor ? corTexto(cor) : ''; }
   function diaDeHoje() { var d = new Date().getDay(); return d === 0 ? 6 : d - 1; }
-  function linhaVazia() { return NOMES_DIAS.map(function () { return ''; }); }
   function temTexto(l) { return l.some(function (t) { return String(t || '').trim(); }); }
+  function hh(h) { return (h < 10 ? '0' : '') + h + 'h'; }
+  function linhaNula() { return NOMES_DIAS.map(function () { return null; }); }
+  function gradeVazia() { var g = { inicio: HORA_INI, fim: HORA_FIM, celulas: [] }; for (var h = HORA_INI; h <= HORA_FIM; h++) g.celulas.push(linhaNula()); return g; }
+  function tituloBloco(c) { return c.t === 'outro' ? (c.d || 'Outro') : (TIPO[c.t] || TIPO.outro)[1]; }
+  function detalheBloco(c) { return c.t === 'outro' ? '' : (c.d || ''); }
+  function textoBloco(c) { return [tituloBloco(c), detalheBloco(c), c.f ? 'até ' + c.f : ''].filter(Boolean).join(' · '); }
+  function tituloComQuebra(t) { // deixa "Escola/cursinho" quebrar depois da barra, e não no meio da palavra
+    var b = el('b'); String(t).split('/').forEach(function (p2, k) { if (k) { b.appendChild(document.createTextNode('/')); b.appendChild(el('wbr')); } b.appendChild(document.createTextNode(p2)); });
+    return b;
+  }
+  function bloco(c) {
+    var t = TIPO[c.t] || TIPO.outro;
+    return el('div', { class: 'blk', title: textoBloco(c), style: 'background:' + t[2] + ';color:' + t[3] }, [
+      tituloComQuebra(tituloBloco(c)), detalheBloco(c) ? el('small', { text: detalheBloco(c) }) : null, c.f ? el('small', { class: 'ate', text: 'até ' + c.f }) : null]);
+  }
   function podeSair() {
     if (!rotinaSuja) return true;
     if (window.confirm('A rotina tem alterações não salvas. Sair mesmo assim?')) { rotinaSuja = false; window.onbeforeunload = null; return true; }
@@ -539,10 +564,73 @@ window.Registros = (function () {
     carregando(raiz, 'Carregando rotina…');
     c.api('rotina', { id: c.id }).then(function (r) {
       if (!r || !r.ok) { falha(raiz, r); return; }
-      ver(r);
+      if (r.formato === 'horas') verHoras(r); else verLivre(r);
     }).catch(function (e) { if (e.message !== 'sessao') falha(raiz, null); });
 
-    function ver(r) {
+    function cabecalho(titulo, nota, botao) {
+      raiz.appendChild(el('div', { class: 'reg-topo' }, [el('div', {}, [el('h2', { class: 'reg-titulo', text: titulo }),
+        el('p', { class: 'nota', style: 'margin:2px 0 0', text: nota })]), botao]));
+    }
+    function notaPapel(r) {
+      return !c.mentor ? 'Organizada pelo seu mentor. Para mudar algum bloco, converse com ele.'
+        : r.podeEditar ? 'O aluno vê esta rotina no app e na planilha dele. Só você, como mentor dele, pode editar.'
+        : 'Só o mentor cadastrado deste aluno edita a rotina. Aqui você só visualiza.';
+    }
+
+    // ---------- Visualização (formato por hora) ----------
+    function verHoras(r) {
+      rotinaSuja = false; window.onbeforeunload = null;
+      raiz.innerHTML = '';
+      var vazia = !r.celulas.some(function (l) { return l.some(Boolean); });
+      var bt = null;
+      if (r.podeEditar) { bt = el('button', { class: 'botao peq', type: 'button', text: vazia ? 'Montar rotina' : 'Editar rotina' }); bt.onclick = function () { editar(r, false); }; }
+      cabecalho(c.mentor ? 'Rotina do aluno' : 'Minha rotina', notaPapel(r), bt);
+      if (vazia) {
+        raiz.appendChild(el('div', { class: 'card vazio-card' }, [el('p', { class: 'vazio', text: c.mentor ? (r.podeEditar ? 'A rotina deste aluno ainda está vazia. Clique em "Montar rotina" para começar.' : 'A rotina deste aluno ainda está vazia. Quem monta é o mentor cadastrado dele.') : 'Seu mentor ainda não montou a sua rotina. Ela aparece aqui assim que ele salvar.' })]));
+        return;
+      }
+      var hj = diaDeHoje();
+      if (!c.mentor) raiz.appendChild(cartaoHoje(r, hj));
+      raiz.appendChild(el('div', { class: 'rotina-rolagem' }, [tabelaHoras(r, hj)]));
+      raiz.appendChild(el('p', { class: 'nota', style: 'margin:0', text: 'No celular, deslize a tabela para o lado para ver todos os dias.' }));
+    }
+    // Hoje: blocos iguais e seguidos viram um só ("09h–12h · Simulado")
+    function cartaoHoje(r, hj) {
+      var itens = [];
+      r.celulas.forEach(function (l, i) {
+        var x = l[hj], h = r.inicio + i;
+        if (!x) return;
+        var ult = itens[itens.length - 1];
+        if (ult && ult.fimH === h && ult.c.t === x.t && ult.c.d === x.d && !ult.c.f) { ult.fimH = h + 1; ult.c = x; return; }
+        itens.push({ ini: h, fimH: h + 1, c: x });
+      });
+      var card = el('div', { class: 'card hoje-card' }, [el('div', { class: 'hoje-tit' }, [el('b', { text: 'Hoje · ' + NOMES_DIAS[hj] }),
+        el('span', { class: 'nota', style: 'margin:0', text: itens.length ? itens.length + (itens.length === 1 ? ' atividade' : ' atividades') : 'dia livre' })])]);
+      if (itens.length) {
+        var lista = el('div', { class: 'hoje-lista' });
+        itens.forEach(function (it) {
+          var fim = it.c.f || hh(it.fimH);
+          lista.appendChild(el('div', { class: 'hoje-item' }, [el('span', { class: 'hoje-hora', text: hh(it.ini) + '–' + fim }), bloco(it.c)]));
+        });
+        card.appendChild(lista);
+      }
+      return card;
+    }
+    function tabelaHoras(r, hj) {
+      var tab = el('table', { class: 'rotina horas' }), cab = el('tr', {}, [el('th', { class: 'hora', scope: 'col', 'aria-label': 'Hora' })]);
+      NOMES_DIAS.forEach(function (d, j) { cab.appendChild(el('th', { class: j === hj ? 'hoje' : '', scope: 'col', text: d })); });
+      tab.appendChild(el('thead', {}, [cab]));
+      var corpo = el('tbody');
+      r.celulas.forEach(function (l, i) {
+        var tr = el('tr', {}, [el('th', { class: 'hora', scope: 'row', text: hh(r.inicio + i) })]);
+        l.forEach(function (x, j) { tr.appendChild(el('td', { class: j === hj ? 'col-hoje' : '' }, x ? [bloco(x)] : [])); });
+        corpo.appendChild(tr);
+      });
+      tab.appendChild(corpo);
+      return tab;
+    }
+
+    function verLivre(r) {
       rotinaSuja = false; window.onbeforeunload = null;
       raiz.innerHTML = '';
       var vazia = !r.linhas.some(temTexto);
@@ -552,12 +640,12 @@ window.Registros = (function () {
           : r.podeEditar ? 'O aluno vê esta rotina no app e na planilha dele. Só você, como mentor dele, pode editar.'
           : 'Só o mentor cadastrado deste aluno edita a rotina. Aqui você só visualiza.' })])]);
       if (r.podeEditar) {
-        var bt = el('button', { class: 'botao peq', type: 'button', text: vazia ? 'Montar rotina' : 'Editar rotina' });
-        bt.onclick = function () { editar(r); };
+        var bt = el('button', { class: 'botao peq', type: 'button', text: 'Montar rotina por hora' });
+        bt.onclick = function () { var g = gradeVazia(); g.versao = r.versao; editar(g, true); };
         topo.appendChild(bt);
       }
       raiz.appendChild(topo);
-      if (r.antiga && r.podeEditar) raiz.appendChild(el('div', { class: 'aviso', text: 'Esta rotina ainda está no formato antigo da planilha (segunda a sexta, 6 blocos, com o horário em cada bloco). Ao salvar pela primeira vez, ela passa para o formato novo, com sábado, domingo, linhas livres e cores.' }));
+      if (r.podeEditar) raiz.appendChild(el('div', { class: 'aviso', text: 'Esta rotina está no formato anterior (texto livre). Clique em "Montar rotina por hora" para montar a nova grade com as atividades prontas; ao salvar, ela substitui esta.' }));
       if (vazia) {
         raiz.appendChild(el('div', { class: 'card vazio-card' }, [el('p', { class: 'vazio', text: c.mentor ? (r.podeEditar ? 'A rotina deste aluno ainda está vazia. Clique em "Montar rotina" para começar.' : 'A rotina deste aluno ainda está vazia. Quem monta é o mentor cadastrado dele.') : 'Seu mentor ainda não montou a sua rotina. Ela aparece aqui assim que ele salvar.' })]));
         return;
@@ -586,141 +674,176 @@ window.Registros = (function () {
       raiz.appendChild(el('p', { class: 'nota', style: 'margin:0', text: 'No celular, deslize a tabela para o lado para ver todos os dias.' }));
     }
 
-    function editar(r) {
-      var L = r.linhas.map(function (l) { return l.slice(); }), C = r.cores.map(function (l) { return l.slice(); });
-      if (!L.length) for (var k = 0; k < (r.padrao || 8); k++) { L.push(linhaVazia()); C.push(linhaVazia()); }
-      var sel = { i: 0, j: 0 }, alvo = 'celula', corAtual = PALETA[1][0];
-      raiz.innerHTML = '';
-      raiz.appendChild(el('div', { class: 'reg-topo' }, [el('div', {}, [
-        el('h2', { class: 'reg-titulo', text: 'Editando a rotina' }),
-        el('p', { class: 'nota', style: 'margin:2px 0 0', text: 'Escreva em cada bloco (Enter quebra a linha). Os dias da semana são fixos; as linhas você ajusta à vontade.' })])]));
 
-      // Barra de ferramentas: cores e linhas
-      var segs = el('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Aplicar a cor em' });
-      [['celula', 'Bloco'], ['linha', 'Linha inteira'], ['coluna', 'Dia inteiro']].forEach(function (o) {
-        var b = el('button', { type: 'button', role: 'radio', 'aria-checked': String(alvo === o[0]), text: o[1] });
-        b.onclick = function () { alvo = o[0]; Array.prototype.forEach.call(segs.children, function (x) { x.setAttribute('aria-checked', String(x === b)); }); };
-        segs.appendChild(b);
+    // ---------- Editor (mentor): pincel de atividades ----------
+    function editar(r, substituiLivre) {
+      var ini = r.inicio, fim = r.fim;
+      var cel = r.celulas.map(function (l) { return l.map(function (x) { return x ? { t: x.t, d: x.d || '', f: x.f || '' } : null; }); });
+      var pincel = null, detalhePincel = '', sel = null, arrastando = false;
+      var maxD = r.maxDetalhe || 80;
+      raiz.innerHTML = '';
+      cabecalho('Editando a rotina', 'Escolha uma atividade e clique (ou arraste) nos horários. Clicar num bloco ocupado troca pela atividade escolhida.', null);
+      if (substituiLivre) raiz.appendChild(el('div', { class: 'aviso', text: 'Ao salvar, esta grade por hora substitui a rotina do formato anterior.' }));
+
+      // Paleta
+      var paleta = el('div', { class: 'paleta-ativ', role: 'group', 'aria-label': 'Atividades' });
+      var chips = {};
+      TIPOS_ROTINA.concat([['borracha', 'Borracha', '#ffffff', '#9a2e28']]).forEach(function (t) {
+        var b = el('button', { class: 'ativ' + (t[0] === 'borracha' ? ' borracha' : ''), type: 'button', 'aria-pressed': 'false', style: 'background:' + t[2] + ';color:' + t[3], text: t[1] });
+        b.onclick = function () { escolher(pincel === t[0] ? null : t[0]); };
+        chips[t[0]] = b; paleta.appendChild(b);
       });
-      var cores = el('div', { class: 'paleta' });
-      PALETA.forEach(function (p) {
-        var b = el('button', { type: 'button', class: 'sw-cor' + (p[0] ? '' : ' sem'), title: p[1], 'aria-label': 'Pintar de ' + p[1].toLowerCase() });
-        if (p[0]) b.style.background = p[0];
-        b.onclick = function () { corAtual = p[0]; aplicarCor(); };
-        cores.appendChild(b);
-      });
-      var nLinhas = el('b', { class: 'n-linhas' });
-      var menos = el('button', { class: 'mini', type: 'button', 'aria-label': 'Tirar a última linha', text: '−' });
-      var mais = el('button', { class: 'mini', type: 'button', 'aria-label': 'Acrescentar uma linha no fim', text: '+' });
-      var avisoLinhas = el('span', { class: 'confirmar' });
-      menos.onclick = function () {
-        if (L.length <= 1) return;
-        if (temTexto(L[L.length - 1]) && avisoLinhas.textContent === '') { avisoLinhas.textContent = 'A última linha tem texto. Clique em − de novo para apagar.'; return; }
-        avisoLinhas.textContent = ''; L.pop(); C.pop(); mudou(); desenharGrade();
-      };
-      mais.onclick = function () { if (L.length >= (r.maxLinhas || 30)) return; avisoLinhas.textContent = ''; L.push(linhaVazia()); C.push(linhaVazia()); mudou(); desenharGrade(); };
+      var inDet = el('input', { type: 'text', maxlength: String(maxD), placeholder: 'ex.: Física, Simulado dia 1', 'aria-label': 'Detalhe dos próximos blocos' });
+      inDet.oninput = function () { detalhePincel = inDet.value.trim(); avisoPincel.textContent = ''; };
+      var avisoPincel = el('span', { class: 'erro', style: 'margin:0;font-size:12.5px' });
+      var opcHoras = function (de, ate, v) { var s2 = el('select', {}); for (var h = de; h <= ate; h++) { var o = el('option', { value: String(h), text: hh(h) }); if (h === v) o.selected = true; s2.appendChild(o); } return s2; };
+      var sIni = opcHoras(0, 23, ini), sFim = opcHoras(0, 23, fim);
+      sIni.setAttribute('aria-label', 'Primeiro horário'); sFim.setAttribute('aria-label', 'Último horário');
+      sIni.onchange = sFim.onchange = function () { mudarHoras(Number(sIni.value), Number(sFim.value)); };
+      // Bloco selecionado: detalhe e horário em que termina
+      var selRot = el('b', { class: 'sel-rot' }), selDet = el('input', { type: 'text', maxlength: String(maxD), placeholder: 'Detalhe (opcional)', 'aria-label': 'Detalhe do bloco' });
+      var selFim = el('input', { type: 'time', step: '300', 'aria-label': 'Termina às' }), selApaga = el('button', { class: 'mini', type: 'button', text: 'Apagar bloco' });
+      var selDica = el('span', { class: 'nota', style: 'margin:0', text: 'Toque num bloco para escrever um detalhe ou o horário em que ele termina.' });
+      var selCampos = el('div', { class: 'sel-campos' }, [selRot, selDet, el('label', { class: 'sel-fim' }, ['termina às ', selFim]), selApaga]);
+      selDet.oninput = function () { if (!sel) return; var x = cel[sel.i][sel.j]; if (!x) return; x.d = selDet.value; redesenhar(sel.i, sel.j); mudou(); };
+      selFim.oninput = function () { if (!sel) return; var x = cel[sel.i][sel.j]; if (!x) return; x.f = selFim.value || ''; redesenhar(sel.i, sel.j); mudou(); };
+      selApaga.onclick = function () { if (!sel) return; cel[sel.i][sel.j] = null; redesenhar(sel.i, sel.j); mudou(); mostrarSel(); };
+
       raiz.appendChild(el('div', { class: 'card ferramentas' }, [
-        el('div', { class: 'ferr-linha' }, [el('span', { class: 'ferr-rot', text: 'Cor em:' }), segs]),
-        el('div', { class: 'ferr-linha' }, [el('span', { class: 'ferr-rot', text: 'Cores:' }), cores]),
-        el('div', { class: 'ferr-linha' }, [el('span', { class: 'ferr-rot', text: 'Linhas:' }), menos, nLinhas, mais, avisoLinhas]),
-        el('p', { class: 'nota', style: 'margin:0', text: 'Para colorir: clique num bloco, escolha se a cor vai no bloco, na linha inteira ou no dia inteiro, e clique na cor.' })
+        el('div', { class: 'ferr-linha' }, [el('span', { class: 'ferr-rot', text: 'Atividade:' }), paleta]),
+        el('div', { class: 'ferr-linha' }, [el('span', { class: 'ferr-rot', text: 'Detalhe:' }), inDet, el('span', { class: 'nota', style: 'margin:0', text: 'vai junto nos próximos blocos que você colocar' }), avisoPincel]),
+        el('div', { class: 'ferr-linha horas-linha' }, [el('span', { class: 'ferr-rot', text: 'Horário:' }), 'das ', sIni, ' às ', sFim]),
+        el('div', { class: 'ferr-linha sel-linha' }, [el('span', { class: 'ferr-rot', text: 'Bloco:' }), selDica, selCampos])
       ]));
 
-      var grade = el('div', { class: 'rotina-rolagem' });
+      var grade = el('div', { class: 'rotina-rolagem grade-edit' });
+      var fixo = document.querySelector('.seletor');
+      document.documentElement.style.setProperty('--topo-fixo', (fixo ? fixo.offsetHeight : 0) + 'px');
+      var fantasma = el('div', { class: 'fantasma', 'aria-hidden': 'true' });
       raiz.appendChild(grade);
+      document.body.appendChild(fantasma);
       var erro = el('p', { class: 'erro', role: 'alert', text: '' });
       var salvar = el('button', { class: 'botao peq', type: 'button', text: 'Salvar rotina' });
       var cancelar = el('button', { class: 'mini', type: 'button', text: 'Cancelar' });
       var status = el('span', { class: 'nota', style: 'margin:0' });
       var acoes = el('div', { class: 'acoes-form' }, [salvar, cancelar, status]);
-      raiz.appendChild(erro);
-      raiz.appendChild(acoes);
+      raiz.appendChild(erro); raiz.appendChild(acoes);
 
-      function mudou() {
-        if (!rotinaSuja) { rotinaSuja = true; window.onbeforeunload = function () { return 'Alterações não salvas'; }; }
-        status.textContent = 'Alterações não salvas';
+      function mudou() { if (!rotinaSuja) { rotinaSuja = true; window.onbeforeunload = function () { return 'Alterações não salvas'; }; } status.textContent = 'Alterações não salvas'; }
+      function escolher(id) {
+        pincel = id; avisoPincel.textContent = '';
+        Object.keys(chips).forEach(function (k) { chips[k].setAttribute('aria-pressed', String(k === id)); });
+        grade.classList.toggle('com-pincel', !!id);
+        if (id) { var t = id === 'borracha' ? ['', 'Borracha', '#ffffff', '#9a2e28'] : TIPO[id]; fantasma.textContent = t[1]; fantasma.style.background = t[2]; fantasma.style.color = t[3]; fantasma.classList.toggle('borracha', id === 'borracha'); }
+        else fantasma.style.display = 'none';
       }
-      function ajustarAltura(t) { t.style.height = 'auto'; t.style.height = Math.max(44, t.scrollHeight + 2) + 'px'; }
-      function marcarSel() {
-        Array.prototype.forEach.call(grade.querySelectorAll('td.sel'), function (x) { x.classList.remove('sel'); });
+      function mostrarSel() {
+        var x = sel ? cel[sel.i][sel.j] : null;
+        selDica.style.display = x ? 'none' : ''; selCampos.style.display = x ? '' : 'none';
+        Array.prototype.forEach.call(grade.querySelectorAll('td.sel'), function (n) { n.classList.remove('sel'); });
+        if (!sel) return;
         var td = grade.querySelector('td[data-i="' + sel.i + '"][data-j="' + sel.j + '"]');
         if (td) td.classList.add('sel');
+        if (!x) return;
+        selRot.textContent = NOMES_DIAS[sel.j].slice(0, 3) + ' ' + hh(ini + sel.i) + ' · ' + (TIPO[x.t] || TIPO.outro)[1];
+        if (document.activeElement !== selDet) selDet.value = x.d || '';
+        if (document.activeElement !== selFim) selFim.value = x.f || '';
+        selDet.placeholder = x.t === 'outro' ? 'Nome da atividade (obrigatório)' : 'Detalhe (opcional)';
       }
-      function aplicarCor() {
-        if (sel.i >= L.length) sel.i = L.length - 1;
-        for (var i = 0; i < L.length; i++) for (var j = 0; j < NOMES_DIAS.length; j++) {
-          var vai = alvo === 'celula' ? (i === sel.i && j === sel.j) : alvo === 'linha' ? i === sel.i : j === sel.j;
-          if (vai) C[i][j] = corAtual;
+      function aplicar(i, j) {
+        if (pincel === 'borracha') cel[i][j] = null;
+        else {
+          if (pincel === 'outro' && !detalhePincel) { avisoPincel.textContent = 'Para "Outro", escreva o nome da atividade no Detalhe.'; inDet.focus(); return false; }
+          cel[i][j] = { t: pincel, d: detalhePincel, f: '' };
         }
-        mudou(); desenharGrade();
+        sel = { i: i, j: j }; redesenhar(i, j); mudou(); mostrarSel();
+        return true;
       }
-      function moverLinha(i, d) {
-        var k = i + d; if (k < 0 || k >= L.length) return;
-        var t = L[i]; L[i] = L[k]; L[k] = t; t = C[i]; C[i] = C[k]; C[k] = t;
-        if (sel.i === i) sel.i = k; mudou(); desenharGrade();
+      function redesenhar(i, j) {
+        var td = grade.querySelector('td[data-i="' + i + '"][data-j="' + j + '"]');
+        if (!td) return;
+        td.innerHTML = '';
+        if (cel[i][j]) td.appendChild(bloco(cel[i][j]));
       }
+      function celulaDoPonto(x, y) { var n = document.elementFromPoint(x, y); n = n && n.closest ? n.closest('td[data-i]') : null; return n && grade.contains(n) ? n : null; }
       function desenharGrade() {
-        nLinhas.textContent = String(L.length);
-        menos.disabled = L.length <= 1; mais.disabled = L.length >= (r.maxLinhas || 30);
-        var tab = el('table', { class: 'rotina editando' }), cab = el('tr');
+        var tab = el('table', { class: 'rotina horas editando' }), cab = el('tr', {}, [el('th', { class: 'hora', 'aria-label': 'Hora' })]);
         NOMES_DIAS.forEach(function (d) { cab.appendChild(el('th', { scope: 'col', text: d })); });
-        cab.appendChild(el('th', { class: 'ferr-col', 'aria-label': 'Linha' }));
         tab.appendChild(el('thead', {}, [cab]));
         var corpo = el('tbody');
-        L.forEach(function (l, i) {
-          var tr = el('tr');
-          l.forEach(function (t, j) {
-            var ta = el('textarea', { rows: '2', maxlength: String(r.maxTexto || 300), 'aria-label': NOMES_DIAS[j] + ', linha ' + (i + 1) });
-            ta.value = t;
-            pintar(ta, C[i][j]);
-            ta.onfocus = function () { sel = { i: i, j: j }; marcarSel(); };
-            ta.oninput = function () { L[i][j] = ta.value; ajustarAltura(ta); mudou(); };
-            var td = el('td', { 'data-i': String(i), 'data-j': String(j) }, [ta]);
-            pintar(td, C[i][j]);
+        cel.forEach(function (l, i) {
+          var tr = el('tr', {}, [el('th', { class: 'hora', scope: 'row', text: hh(ini + i) })]);
+          l.forEach(function (x, j) {
+            var td = el('td', { 'data-i': String(i), 'data-j': String(j), tabindex: '0', title: NOMES_DIAS[j] + ', ' + hh(ini + i), 'aria-label': NOMES_DIAS[j] + ' ' + hh(ini + i) }, x ? [bloco(x)] : []);
+            td.onkeydown = function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); clicar(i, j); } };
             tr.appendChild(td);
           });
-          var sobe = el('button', { class: 'mini', type: 'button', title: 'Subir a linha', 'aria-label': 'Subir a linha ' + (i + 1), text: '↑' });
-          var desce = el('button', { class: 'mini', type: 'button', title: 'Descer a linha', 'aria-label': 'Descer a linha ' + (i + 1), text: '↓' });
-          var insere = el('button', { class: 'mini', type: 'button', title: 'Inserir uma linha abaixo', 'aria-label': 'Inserir uma linha abaixo da linha ' + (i + 1), text: '+' });
-          var tira = el('button', { class: 'mini', type: 'button', title: 'Apagar a linha', 'aria-label': 'Apagar a linha ' + (i + 1), text: '✕' });
-          sobe.disabled = i === 0; desce.disabled = i === L.length - 1;
-          insere.disabled = L.length >= (r.maxLinhas || 30); tira.disabled = L.length <= 1;
-          sobe.onclick = function () { moverLinha(i, -1); };
-          desce.onclick = function () { moverLinha(i, 1); };
-          insere.onclick = function () { L.splice(i + 1, 0, linhaVazia()); C.splice(i + 1, 0, linhaVazia()); mudou(); desenharGrade(); };
-          tira.onclick = function () {
-            if (temTexto(L[i]) && !tira.classList.contains('perigo')) { tira.classList.add('perigo'); tira.textContent = 'Apagar?'; return; }
-            L.splice(i, 1); C.splice(i, 1); if (sel.i >= L.length) sel.i = L.length - 1; mudou(); desenharGrade();
-          };
-          tr.appendChild(el('td', { class: 'ferr-col' }, [el('div', { class: 'ferr-btns' }, [sobe, desce, insere, tira])]));
           corpo.appendChild(tr);
         });
         tab.appendChild(corpo);
-        grade.innerHTML = '';
-        grade.appendChild(tab);
-        Array.prototype.forEach.call(grade.querySelectorAll('textarea'), ajustarAltura);
-        marcarSel();
+        grade.innerHTML = ''; grade.appendChild(tab);
+        mostrarSel();
+      }
+      function clicar(i, j) { if (pincel) aplicar(i, j); else { sel = { i: i, j: j }; mostrarSel(); if (cel[i][j]) selDet.focus(); } }
+      // Clique e arraste para pintar vários horários de uma vez (mouse e toque)
+      grade.addEventListener('pointerdown', function (ev) {
+        var td = ev.target.closest ? ev.target.closest('td[data-i]') : null;
+        if (!td) return;
+        var i = Number(td.getAttribute('data-i')), j = Number(td.getAttribute('data-j'));
+        if (pincel) { ev.preventDefault(); arrastando = aplicar(i, j); if (arrastando && grade.setPointerCapture) try { grade.setPointerCapture(ev.pointerId); } catch (e) { } }
+        else clicar(i, j);
+      });
+      grade.addEventListener('pointermove', function (ev) {
+        if (pincel && ev.pointerType === 'mouse') { fantasma.style.display = 'block'; fantasma.style.left = (ev.clientX + 14) + 'px'; fantasma.style.top = (ev.clientY + 14) + 'px'; }
+        if (!arrastando) return;
+        var td = celulaDoPonto(ev.clientX, ev.clientY);
+        if (!td) return;
+        var i = Number(td.getAttribute('data-i')), j = Number(td.getAttribute('data-j')), x = cel[i][j];
+        var igual = pincel === 'borracha' ? !x : x && x.t === pincel && x.d === detalhePincel && !x.f;
+        if (!igual) aplicar(i, j);
+      });
+      var parar = function () { arrastando = false; };
+      grade.addEventListener('pointerup', parar); grade.addEventListener('pointercancel', parar);
+      grade.addEventListener('pointerleave', function () { fantasma.style.display = 'none'; });
+      var teclaEsc = function (ev) { if (ev.key === 'Escape' && pincel) escolher(null); };
+      document.addEventListener('keydown', teclaEsc);
+      function sair() { document.removeEventListener('keydown', teclaEsc); fantasma.remove(); }
+
+      function mudarHoras(nIni, nFim) {
+        if (nFim < nIni) { var tmp = nIni; nIni = nFim; nFim = tmp; sIni.value = String(nIni); sFim.value = String(nFim); }
+        var perde = cel.some(function (l, i) { var h = ini + i; return (h < nIni || h > nFim) && l.some(Boolean); });
+        if (perde && !window.confirm('Alguns horários que vão sair da grade têm atividades. Apagar esses blocos?')) { sIni.value = String(ini); sFim.value = String(fim); return; }
+        var nova = [];
+        for (var h = nIni; h <= nFim; h++) nova.push(h >= ini && h <= fim ? cel[h - ini] : linhaNula());
+        if (sel) { var hs = ini + sel.i; sel = hs >= nIni && hs <= nFim ? { i: hs - nIni, j: sel.j } : null; }
+        cel = nova; ini = nIni; fim = nFim; mudou(); desenharGrade();
       }
       desenharGrade();
+      escolher(null);
 
       cancelar.onclick = function () {
-        if (!rotinaSuja) { ver(r); return; }
-        confirmarInline(acoes, 'Descartar as alterações?', 'Descartar', function () { ver(r); });
+        var voltar = function () { sair(); rotina(raiz, c); };
+        if (!rotinaSuja) { voltar(); return; }
+        confirmarInline(acoes, 'Descartar as alterações?', 'Descartar', function () { rotinaSuja = false; window.onbeforeunload = null; voltar(); });
       };
       salvar.onclick = function () {
         erro.textContent = '';
+        var semNome = null;
+        cel.forEach(function (l, i) { l.forEach(function (x, j) { if (x && x.t === 'outro' && !String(x.d || '').trim() && !semNome) semNome = { i: i, j: j }; }); });
+        if (semNome) { sel = semNome; mostrarSel(); erro.textContent = 'Um bloco "Outro" está sem nome: escreva o nome da atividade no Detalhe.'; return; }
         salvar.disabled = true; salvar.textContent = 'Salvando…';
-        c.api('salvarRotina', { id: c.id, linhas: L, cores: C, versao: r.versao }).then(function (x) {
+        c.api('salvarRotinaHoras', { id: c.id, inicio: ini, fim: fim, celulas: cel, versao: r.versao }).then(function (x) {
           salvar.disabled = false; salvar.textContent = 'Salvar rotina';
           if (x && x.ok) {
-            r.linhas = x.linhas; r.cores = x.cores; r.versao = x.versao; r.antiga = false;
+            rotinaSuja = false; window.onbeforeunload = null; sair();
             c.aviso(x.mudou ? 'Rotina salva. O aluno já vê a nova versão.' : 'Nada mudou na rotina.');
-            ver(r); return;
+            verHoras({ formato: 'horas', inicio: x.inicio, fim: x.fim, celulas: x.celulas, versao: x.versao, podeEditar: true, maxDetalhe: maxD });
+            return;
           }
           erro.textContent = msgErro(x);
           if (x && x.erro === 'mudou') {
             var rec = el('button', { class: 'mini', type: 'button', text: 'Recarregar a rotina' });
-            rec.onclick = function () { rotinaSuja = false; window.onbeforeunload = null; rotina(raiz, c); };
+            rec.onclick = function () { rotinaSuja = false; window.onbeforeunload = null; sair(); rotina(raiz, c); };
             erro.appendChild(el('br')); erro.appendChild(rec);
           }
         }).catch(function (e) { salvar.disabled = false; salvar.textContent = 'Salvar rotina'; if (e.message !== 'sessao') erro.textContent = 'Sem conexão. Suas alterações continuam aqui: tente salvar de novo.'; });
