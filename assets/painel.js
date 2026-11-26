@@ -5,17 +5,19 @@ window.Painel = (function () {
   var META_ACERTO = 0.6, META_RED = 900;
   var AREAS = [['L', 'Linguagens', '#2F6FDE'], ['H', 'Ciências Humanas', '#E07B39'], ['N', 'Ciências da Natureza', '#1E9E6A'], ['M', 'Matemática', '#8E5BD6'], ['R', 'Redação', '#D6457A']];
   // Faixas por área: média de acertos dos últimos 5 simulados que têm a área. Sobe e desce com o momento do aluno.
-  // Objetivas: branca até 20 · azul 21–25 · roxa 26–30 · marrom 31–35 · preta 36–45.
-  // Redação (sobre 1000): azul a partir de 480, roxa 600, marrom 720 e preta só com 900 ou mais (pedido do Lucas, 26/11).
+  // Objetivas: branca até 20 · azul 21–25 · roxa 26–30 · marrom 31–35 · preta 36–42 · vermelha 43–45 (a maior do jiu-jítsu).
+  // Graus nas objetivas: 1 acerto de média = 1 grau, até 4 (branca: 17, 18, 19, 20; azul: 22…25; preta: 37…40).
+  // Redação (sobre 1000): azul 480, roxa 600, marrom 720, preta 900 e vermelha 960 (43/45); graus proporcionais (1/5 da faixa).
   var JANELA = 5;
   var FAIXAS = [
     { nome: 'Branca', cor: '#F6F6F2', borda: '#B9C1CC', ponta: '#202226', texto: '#6B7480', costura: 'rgba(16,32,46,.14)' },
     { nome: 'Azul', cor: '#2F6BDE', borda: '#1F52B5', ponta: '#202226', texto: '#2F6BDE', costura: 'rgba(255,255,255,.35)' },
     { nome: 'Roxa', cor: '#7E3BC9', borda: '#6129A6', ponta: '#202226', texto: '#7E3BC9', costura: 'rgba(255,255,255,.35)' },
     { nome: 'Marrom', cor: '#7B4A2B', borda: '#5C351E', ponta: '#202226', texto: '#7B4A2B', costura: 'rgba(255,255,255,.3)' },
-    { nome: 'Preta', cor: '#24262B', borda: '#0F1013', ponta: '#D62828', texto: '#24262B', costura: 'rgba(255,255,255,.22)' }
+    { nome: 'Preta', cor: '#24262B', borda: '#0F1013', ponta: '#D62828', texto: '#24262B', costura: 'rgba(255,255,255,.22)' },
+    { nome: 'Vermelha', cor: '#C8102E', borda: '#930B21', ponta: '#202226', texto: '#C8102E', costura: 'rgba(255,255,255,.3)' }
   ];
-  var MIN_OBJ = [0, 21, 26, 31, 36], MIN_RED = [0, 480, 600, 720, 900], BASE_OBJ = 15, BASE_RED = 320, MAX_OBJ = 45, MAX_RED = 1000;
+  var MIN_OBJ = [0, 21, 26, 31, 36, 43], MIN_RED = [0, 480, 600, 720, 900, 960], BASE_OBJ = 15, BASE_RED = 320, GRAU0_BRANCA = 16;
   var ITENS = [['Matemática', 'M'], ['Física', 'N'], ['Química', 'N'], ['Biologia', 'N'], ['História', 'H'], ['Geografia', 'H'], ['Sociologia', 'H'], ['Filosofia', 'H'], ['Linguagens', 'L'], ['Redação', 'R']];
   var GRUPOS = [['Para reforçar', 'var(--ruim)'], ['No caminho', 'var(--aviso)'], ['Fortes', 'var(--bom)'], ['Avaliando', '#AAB3C0']];
   var NS = 'http://www.w3.org/2000/svg';
@@ -85,9 +87,11 @@ window.Painel = (function () {
     var janela = vals.slice(-JANELA), m = media(janela), i = indiceFaixa(m, mins), prox = i < FAIXAS.length - 1 ? i + 1 : null;
     var base = i === 0 ? (red ? BASE_RED : BASE_OBJ) : mins[i];
     var prog = prox === null ? 1 : Math.max(0, Math.min(1, (m - base) / (mins[prox] - base)));
-    // Graus na ponteira (0 a 4): quanto da faixa atual já foi percorrido; na preta, até o máximo da prova
-    var teto = prox === null ? (red ? MAX_RED : MAX_OBJ) : mins[prox];
-    var graus = Math.max(0, Math.min(4, Math.floor(5 * (m - base) / Math.max(1e-9, teto - base))));
+    // Graus na ponteira (0 a 4). Objetivas: cada acerto de média acima do início da faixa = 1 grau (na branca, acima de 16).
+    // Redação: cada 1/5 da faixa = 1 grau. A vermelha é a última e não tem graus.
+    var graus = prox === null ? 0 : red ? Math.floor(5 * (m - base) / (mins[prox] - base) + 1e-9)
+      : Math.floor(m + 1e-9) - (i === 0 ? GRAU0_BRANCA : mins[i]);
+    graus = Math.max(0, Math.min(4, graus));
     // Comparação com a média de antes do último simulado: mostra se subiu ou desceu de faixa
     var antes = vals.length >= 2 ? indiceFaixa(media(vals.slice(0, -1).slice(-JANELA)), mins) : i;
     return { area: nome, n: janela.length, total: vals.length, media: m, idx: i, faixa: FAIXAS[i], prox: prox === null ? null : FAIXAS[prox],
@@ -114,8 +118,7 @@ window.Painel = (function () {
   }
 
   // ---------- Desenho: faixa de jiu-jítsu esticada, com costuras e a ponteira na borda direita ----------
-  // A ponteira é preta (vermelha na faixa preta) e recebe as listras brancas dos graus: cada grau = 1/5 do caminho
-  // até a próxima faixa (na preta, até o máximo da prova).
+  // A ponteira é preta (vermelha, com bordas brancas, na faixa preta) e recebe as listras brancas dos graus.
   function faixaSvg(f, pequena, graus) {
     var W = 150, H = 38, x0 = 2, y0 = 4, w = W - 5, h = 29;
     var svg = sv('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img', 'aria-label': 'Faixa ' + f.nome.toLowerCase() + (graus ? ', ' + graus + (graus === 1 ? ' grau' : ' graus') : ''), class: pequena ? 'faixa-mini' : 'faixa-svg' });
@@ -228,8 +231,8 @@ window.Painel = (function () {
         el('span', { class: 'nv-prog', text: med }), barra, el('span', { class: 'nv-prog', text: falta })]));
     });
     var trilha = el('ul', { class: 'trilha' });
-    FAIXAS.forEach(function (f, k) { var ate = k < 4 ? MIN_OBJ[k + 1] - 1 : 45; trilha.appendChild(el('li', {}, [faixaSvg(f, true), el('b', { text: f.nome }), ' ' + (k ? MIN_OBJ[k] + '–' + ate : 'até ' + ate)])); });
-    raiz.appendChild(el('div', { class: 'card' }, [gradeNv, el('p', { class: 'nota', text: 'A faixa é a média de acertos ' + (M ? 'do aluno' : 'dos seus') + ' nos últimos 5 simulados de cada área: ela sobe e desce com o momento ' + (M ? 'dele' : 'em que você está') + '. Cada listra branca na ponteira é um grau: um quinto do caminho até a próxima faixa. Na redação: azul a partir de 480, roxa 600, marrom 720 e preta com 900 ou mais.' }), el('div', { style: 'margin-top:10px' }, [trilha])]));
+    FAIXAS.forEach(function (f, k) { var ate = k < FAIXAS.length - 1 ? MIN_OBJ[k + 1] - 1 : 45; trilha.appendChild(el('li', {}, [faixaSvg(f, true), el('b', { text: f.nome }), ' ' + (k ? MIN_OBJ[k] + '–' + ate : 'até ' + ate)])); });
+    raiz.appendChild(el('div', { class: 'card' }, [gradeNv, el('p', { class: 'nota', text: 'A faixa é a média de acertos ' + (M ? 'do aluno' : 'dos seus') + ' nos últimos 5 simulados de cada área: ela sobe e desce com o momento ' + (M ? 'dele' : 'em que você está') + '. Cada listra branca na ponteira é um grau: 1 acerto a mais de média = 1 grau, até 4. Na redação: azul a partir de 480, roxa 600, marrom 720, preta 900 e vermelha 960.' }), el('div', { style: 'margin-top:10px' }, [trilha])]));
 
     // Evolução
     raiz.appendChild(el('div', { class: 'sec', text: M ? 'Evolução' : 'Sua evolução' }));
