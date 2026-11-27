@@ -30,4 +30,12 @@ ok(n2([29,41,40,38,10,42],[])==='Marrom 3g','antes das regras: média dos últim
 ok(n2([38,40,20],[])==='Marrom 1g','antes das regras: menos de 5 simulados contam pela média (32,7)');
 ok(n2([29,41,40,38,10,42],[20])==='Marrom 3g','depois: um simulado abaixo não derruba (precisa de 3 semanas)');
 ok(n2([29,41,40,38,40,42],[40,40,40,40,40])==='Preta 4g','depois: 5 seguidos com 36+ conquistam a preta');
+// base do ENEM: é a faixa de partida; simulados antigos não contam; subir pede 5 novos seguidos no nível
+const nb=(base,a,b)=>{const r=nivel(antigos(a).concat(sims(b).map((s,i)=>({...s,ordem:a.length+i+1}))),'M','x',{M:base});return r.faixa.nome+' '+r.graus+'g'+(r.sims?'':' (só ENEM)');};
+ok(nb(18,[38,40,39],[])==='Branca 2g (só ENEM)','ENEM 18: branca, 2 graus; simulados antigos não contam');
+ok(nb(36,[],[])==='Preta 0g (só ENEM)','ENEM 36: preta');
+ok(nb(18,[],[30,30,30,30])==='Branca 4g','4 simulados novos com 30: ainda branca (graus no máximo)');
+ok(nb(18,[],[30,30,30,30,27])==='Roxa 3g','5 seguidos com 26+: roxa (média 29,4 = 3 graus)');
+ok(nb(27,[],[20])==='Roxa 1g','ENEM 27 (roxa) e um simulado fraco: não cai');
+const vazio=nivel([], 'L','x',{L:36});ok(vazio.n===1&&vazio.faixa.nome==='Preta','só com a base, sem simulados, já mostra a faixa');
 console.log(falhas?falhas+' falha(s)':'TUDO OK');process.exit(falhas?1:0);

@@ -58,7 +58,7 @@ window.Painel = (function () {
     r.topMateria = topo(c);
     r.temas = temas(d.erros);
     r.errosUlt = ult ? d.erros.filter(function (e) { return norm(e.simulado) === norm(ult.prova); }).length : 0;
-    r.niveis = AREAS.map(function (a) { return nivel(sims, a[0], a[1]); });
+    r.niveis = AREAS.map(function (a) { return nivel(sims, a[0], a[1], d.base); });
     r.intervir = intervir(sims, d.erros);
     return r;
   }
@@ -104,8 +104,8 @@ window.Painel = (function () {
     return Math.max(0, Math.min(4, g));
   }
   // Repassa o histórico e devolve o estado depois do último simulado
-  function jornada(lista, mins, red) {
-    var st = { f: 0, g: 0, abaixo: null };
+  function jornada(lista, mins, red, base) {
+    var st = base === null || base === undefined ? { f: 0, g: 0, abaixo: null } : { f: indiceFaixa(base, mins), g: grauDe(base, indiceFaixa(base, mins), mins, red), abaixo: null };
     lista.forEach(function (x, t) {
       var jan = lista.slice(Math.max(0, t - JANELA + 1), t + 1).map(function (y) { return y.v; }), m = media(jan);
       if (x.d === null || x.d < INICIO_REGRAS) { // faixa de partida, pelos simulados que já estavam no sistema
@@ -132,18 +132,21 @@ window.Painel = (function () {
     });
     return st;
   }
-  function nivel(sims, k, nome) {
-    var red = k === 'R', mins = red ? MIN_RED : MIN_OBJ;
+  // base = nota do ENEM daquela área (se o mentor gravou): é a faixa de partida, e aí só contam os simulados lançados
+  // depois que as regras entraram (28/11/2026); sem base, a partida vem da média dos simulados que já estavam no sistema.
+  function nivel(sims, k, nome, base) {
+    var red = k === 'R', mins = red ? MIN_RED : MIN_OBJ, b = base && ok(base[k]) ? Number(base[k]) : null;
     var lista = sims.filter(function (s) { return ok(s[k]); }).map(function (s) { return { v: Number(s[k]), d: dataSim(s) }; });
-    if (!lista.length) return { area: nome, n: 0, redacao: red };
-    var vals = lista.map(function (x) { return x.v; }), janela = vals.slice(-JANELA), m = media(janela);
-    var st = jornada(lista, mins, red), i = st.f, prox = i < FAIXAS.length - 1 ? i + 1 : null;
-    var antes = lista.length >= 2 ? jornada(lista.slice(0, -1), mins, red).f : i;
+    if (b !== null) lista = lista.filter(function (x) { return x.d !== null && x.d >= INICIO_REGRAS; });
+    if (!lista.length && b === null) return { area: nome, n: 0, redacao: red };
+    var vals = lista.map(function (x) { return x.v; }), janela = vals.slice(-JANELA), m = janela.length ? media(janela) : b;
+    var st = jornada(lista, mins, red, b), i = st.f, prox = i < FAIXAS.length - 1 ? i + 1 : null;
+    var antes = lista.length >= 2 ? jornada(lista.slice(0, -1), mins, red, b).f : i;
     // caminho para a próxima faixa: quantos simulados seguidos (do mais recente para trás) já estão no nível dela
     var seguidos = 0;
     if (prox !== null) for (var t = vals.length - 1; t >= 0 && vals[t] >= mins[prox] - 1e-9 && seguidos < CONQUISTA; t--) seguidos++;
     var risco = st.abaixo ? { desde: st.abaixo.d, ate: st.abaixo.d === null ? null : st.abaixo.d + DIAS_QUEDA * DIA_MS, para: FAIXAS[Math.min(i - 1, indiceFaixa(media(st.abaixo.vals), mins))] } : null;
-    return { area: nome, n: janela.length, total: vals.length, media: m, idx: i, faixa: FAIXAS[i], prox: prox === null ? null : FAIXAS[prox],
+    return { area: nome, n: janela.length || 1, sims: janela.length, base: b, total: vals.length, media: m, idx: i, faixa: FAIXAS[i], prox: prox === null ? null : FAIXAS[prox],
       minProx: prox === null ? null : mins[prox], seguidos: seguidos, graus: st.g, risco: risco, mudou: i - antes, de: FAIXAS[antes], redacao: red };
   }
 
@@ -188,6 +191,55 @@ window.Painel = (function () {
     sv('rect', { x: x0, y: y0, width: w, height: h, rx: 3, fill: 'none', stroke: f.borda, 'stroke-width': 1.2 }, svg);
     return svg;
   }
+  // Faixas (semiluas) + para o mentor/gestor: a base do ENEM, editável
+  function desenharFaixas(card, d, r, ctx) {
+    card.innerHTML = '';
+    var gradeNv = el('div', { class: 'niveis' });
+    // Semilua: a faixa atual no centro e o arco subindo na cor da próxima, conforme a média chega na meta dela
+    r.niveis.forEach(function (nv) {
+      var f = nv.n ? nv.faixa : FAIXAS[0];
+      var apoio = !nv.n ? 'sem simulados' : !nv.prox ? 'faixa máxima' : (nv.sims ? 'média ' + num(nv.media, nv.redacao) : 'ENEM ' + num(nv.base, nv.redacao)) + ' · meta ' + nv.minProx;
+      gradeNv.appendChild(el('div', { class: 'card nv' + (nv.n ? '' : ' vazio-nv') }, [semilua(nv), el('span', { class: 'nv-apoio', text: apoio }),
+        el('span', { class: 'nv-area', text: nv.area }),
+        el('span', { class: 'nv-metal', style: 'color:' + (nv.n ? f.texto : '#9AA4B2'), text: nv.n ? 'Faixa ' + f.nome.toLowerCase() : 'Sem faixa' })]));
+    });
+    card.appendChild(gradeNv);
+    if (!ctx) return;
+    var base = d.base || {};
+    var txt = AREAS.map(function (a) { return a[1].replace('Ciências ', '').replace('da ', '') + ' ' + (ok(base[a[0]]) ? base[a[0]] : '—'); }).join(' · ');
+    var linha = el('div', { class: 'base-enem' }, [el('b', { text: 'Base ENEM: ' }), el('span', { text: AREAS.some(function (a) { return ok(base[a[0]]); }) ? txt : 'não informada (a faixa de partida vem dos simulados já lançados)' })]);
+    var bt = el('button', { class: 'mini', type: 'button', text: 'Editar' });
+    linha.appendChild(bt);
+    card.appendChild(linha);
+    bt.onclick = function () {
+      var form = el('div', { class: 'base-form' }), ins = {};
+      AREAS.forEach(function (a) {
+        var red = a[0] === 'R', inp = el('input', { type: 'number', min: '0', max: red ? '1000' : '45', step: red ? '20' : '1', inputmode: 'numeric', value: ok(base[a[0]]) ? String(base[a[0]]) : '', 'aria-label': a[1] });
+        ins[a[0]] = inp;
+        form.appendChild(el('label', {}, [el('span', { text: a[1] + (red ? ' (0–1000)' : ' (acertos)') }), inp]));
+      });
+      var erro = el('p', { class: 'erro', role: 'alert' }), salvar = el('button', { class: 'botao peq', type: 'button', text: 'Salvar base' }), cancelar = el('button', { class: 'mini', type: 'button', text: 'Cancelar' });
+      form.appendChild(el('div', { class: 'acoes-form' }, [salvar, cancelar]));
+      form.appendChild(erro);
+      linha.replaceWith(form);
+      ins.L.focus();
+      cancelar.onclick = function () { desenharFaixas(card, d, r, ctx); };
+      salvar.onclick = function () {
+        var nova = {};
+        AREAS.forEach(function (a) { var v = ins[a[0]].value.trim(); nova[a[0]] = v === '' ? null : Number(v); });
+        salvar.disabled = true; salvar.textContent = 'Salvando…'; erro.textContent = '';
+        ctx.api('salvarBaseEnem', { id: ctx.id, base: nova }).then(function (x) {
+          salvar.disabled = false; salvar.textContent = 'Salvar base';
+          if (!x || !x.ok) { erro.textContent = (x && x.msg) || 'Não foi possível salvar. Tente de novo.'; return; }
+          d.base = x.base;
+          r.niveis = AREAS.map(function (a) { return nivel(r.sims, a[0], a[1], d.base); });
+          desenharFaixas(card, d, r, ctx);
+          if (ctx.aviso) ctx.aviso('Base do ENEM salva. As faixas já partem dela.');
+        }).catch(function (e) { salvar.disabled = false; salvar.textContent = 'Salvar base'; if (e.message !== 'sessao') erro.textContent = 'Sem conexão. Tente de novo.'; });
+      };
+    };
+  }
+
   function semilua(nv) {
     var R = 80, cx = 100, cy = 96;
     var pt = function (fr) { var a = Math.PI * (1 - fr); return [cx + R * Math.cos(a), cy - R * Math.sin(a)]; };
@@ -284,16 +336,10 @@ window.Painel = (function () {
 
     // Faixas
     raiz.appendChild(el('div', { class: 'sec', text: M ? 'Faixas por área' : 'Suas faixas por área' }));
-    var gradeNv = el('div', { class: 'niveis' });
-    // Semilua: a faixa atual no centro e o arco subindo na cor da próxima, conforme a média chega na meta dela
-    r.niveis.forEach(function (nv) {
-      var f = nv.n ? nv.faixa : FAIXAS[0];
-      var apoio = !nv.n ? 'sem simulados' : !nv.prox ? 'faixa máxima' : 'média ' + num(nv.media, nv.redacao) + ' · meta ' + nv.minProx;
-      gradeNv.appendChild(el('div', { class: 'card nv' + (nv.n ? '' : ' vazio-nv') }, [semilua(nv), el('span', { class: 'nv-apoio', text: apoio }),
-        el('span', { class: 'nv-area', text: nv.area }),
-        el('span', { class: 'nv-metal', style: 'color:' + (nv.n ? f.texto : '#9AA4B2'), text: nv.n ? 'Faixa ' + f.nome.toLowerCase() : 'Sem faixa' })]));
-    });
-    raiz.appendChild(el('div', { class: 'card' }, [gradeNv]));
+    var cardFx = el('div', { class: 'card' });
+    raiz.appendChild(cardFx);
+    desenharFaixas(cardFx, d, r, M && opts.ctx && d.codigo !== undefined ? opts.ctx : null);
+
 
     // Evolução
     raiz.appendChild(el('div', { class: 'sec', text: M ? 'Evolução' : 'Sua evolução' }));

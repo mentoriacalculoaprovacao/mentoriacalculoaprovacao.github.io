@@ -15,7 +15,7 @@ function novoServidor(){
       return {inicio:6,fim:23,celulas:c,versao:'v1'};})(),
     livre:{linhas:[['8h - 10h','Simulado','','','','',''],['','','','','','','']],cores:[['','','','','','#00ff00',''],['#ff0000','','','','','','']],versao:'L1'}};
   const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'');
-  const dados=()=>({aluno:'Aluna Exemplo',primeiro:'Aluna',curso:'Medicina',desde:'out de 2026',mentor:'Mentor Exemplo',simulados:[{prova:'SAS 1 2024',data:'01/10/2026',ordem:1,L:30,H:28,N:null,M:null,R:740}],erros:st.erros});
+  const dados=()=>({aluno:'Aluna Exemplo',primeiro:'Aluna',curso:'Medicina',desde:'out de 2026',mentor:'Mentor Exemplo',simulados:[{prova:'SAS 1 2024',data:'01/10/2026',ordem:1,L:30,H:28,N:null,M:null,R:740}],erros:st.erros,base:st.base||null});
   return {st, resp(req,papel){
     st.log.push(req.acao);
     switch(req.acao){
@@ -23,6 +23,7 @@ function novoServidor(){
       case 'entrar': return {ok:true,sessao:'S',quem:{nome:papel==='mentor'?'Mentor Exemplo':'Aluna Exemplo',via:'codigo',aluno:papel==='aluno',mentor:papel==='mentor'}};
       case 'inicio': return papel==='aluno'?{ok:true,papel:'aluno',quem:{nome:'Aluna Exemplo',via:'codigo',aluno:true},fases:{lancamentos:true,caderno:true,diagnostico:true,rotina:true,revisao:true,pdfs:true},atualizado:'31/10/2026',dados:dados()}
         :{ok:true,papel:'mentor',quem:{nome:'Mentor Exemplo',via:'codigo',mentor:true},fases:{lancamentos:true,caderno:true,diagnostico:true,rotina:true,revisao:true,pdfs:true},atualizado:'31/10/2026',alunos:[{id:'A1',aluno:'Aluna Exemplo',mentor:'Mentor Exemplo',nSims:1}],mentores:[],meuMentor:'Mentor Exemplo'};
+      case 'salvarBaseEnem': if(papel==='aluno') return {ok:false,erro:'soMentor'}; st.base=req.base; return {ok:true,base:req.base};
       case 'aluno': return {ok:true,aluno:Object.assign({id:'A1',codigo:'AB12-CD34',diagnostico:{'Prontidão (0–100)':'60'}},dados())};
       case 'simulados': return {ok:true,catalogo:[{nome:'SAS 1 2024',chave:'sas12024',alunos:3,ultimo:1},{nome:'Bernoulli 2 2025',chave:'bernoulli22025',alunos:2,ultimo:0}],lancamentos:st.lanc.slice().sort((a,b)=>b.quando-a.quando)};
       case 'salvarSimulado':{
@@ -223,6 +224,14 @@ function novoServidor(){
   await p.fill('input[aria-label="Código de acesso"]','ABCD-EFGH');await p.click('text=Entrar com o código');await p.waitForTimeout(700);
   const abas=await p.$$eval('.aba',a=>a.map(x=>x.textContent));
   ok(JSON.stringify(abas)===JSON.stringify(['Painel','Simulados','Caderno de erros','Rotina','Diagnóstico']),'mentor tem Painel, Simulados, Caderno, Rotina e Diagnóstico');
+  // base do ENEM: mentor edita no painel e a faixa parte dela
+  ok((await p.textContent('.base-enem')).includes('não informada'),'painel do mentor mostra a base do ENEM (vazia)');
+  await p.click('.base-enem button');
+  await p.fill('.base-form input[aria-label="Linguagens"]','36');await p.fill('.base-form input[aria-label="Matemática"]','18');
+  await p.click('text=Salvar base');await p.waitForTimeout(300);
+  const fxb=await p.$$eval('.nv',l=>l.map(x=>x.innerText.replace(/\n+/g,' ')));
+  ok(srv.st.base&&srv.st.base.L===36&&srv.st.base.M===18&&srv.st.base.H===null&&fxb[0].includes('Faixa preta')&&fxb[0].includes('ENEM 36')&&fxb[3].includes('Faixa branca'),'salva a base e as faixas partem dela: '+fxb[0]+' / '+fxb[3]);
+  await p.screenshot({path:__dirname+'/mentor_base_enem.png',fullPage:true});
   await p.click('.aba:has-text("Simulados")');await p.waitForTimeout(400);
   ok((await p.textContent('.reg-titulo'))==='Simulados lançados','mentor vê os simulados do aluno');
   await p.click('.aba:has-text("Caderno")');await p.waitForTimeout(400);

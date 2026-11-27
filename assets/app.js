@@ -436,7 +436,7 @@
     else if (x.semPlanilha) conteudo.appendChild(el('div', { class: 'aviso', text: 'Este aluno respondeu o diagnóstico, mas as planilhas dele ainda não foram criadas. Elas são criadas automaticamente; se demorar, use Mentoria → "Criar planilhas dos alunos pendentes".' }));
     else {
       if (fases.revisao) { var rev = el('div', {}); conteudo.appendChild(rev); R.revisao(rev, ctx); }
-      P.montar(x, { mentor: true, raiz: conteudo, semCabecalho: true });
+      P.montar(x, { mentor: true, raiz: conteudo, semCabecalho: true, ctx: ctx });
     }
   }
 
