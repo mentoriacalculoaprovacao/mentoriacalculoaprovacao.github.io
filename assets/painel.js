@@ -262,25 +262,14 @@ window.Painel = (function () {
     // Faixas
     raiz.appendChild(el('div', { class: 'sec', text: M ? 'Faixas por área' : 'Suas faixas por área' }));
     var gradeNv = el('div', { class: 'niveis' });
+    // Só as faixas: as regras (conquista, queda, graus) o mentor explica pessoalmente
     r.niveis.forEach(function (nv) {
-      if (!nv.n) { gradeNv.appendChild(el('div', { class: 'card nv vazio-nv' }, [faixaSvg(FAIXAS[0]), el('span', { class: 'nv-area', text: nv.area }), el('span', { class: 'nv-metal', style: 'color:#9AA4B2', text: 'Sem faixa' }), el('span', { class: 'nv-prog', text: 'nenhum simulado desta área ainda' })])); return; }
-      var med = 'média ' + num(nv.media, nv.redacao) + (nv.n === 1 ? ' no último simulado' : ' nos últimos ' + nv.n);
-      var corP = nv.prox ? nv.prox.cor : '';
-      var pontos = nv.prox ? el('div', { class: 'nv-pontos', title: nv.seguidos + ' de 5 simulados seguidos no nível da faixa ' + nv.prox.nome.toLowerCase() },
-        [0, 1, 2, 3, 4].map(function (q) { return el('span', { class: q < nv.seguidos ? 'on' : '', style: q < nv.seguidos ? 'background:' + corP + (nv.prox.nome === 'Branca' ? ';box-shadow:inset 0 0 0 1px #B9C1CC' : '') : '' }); })) : null;
-      var meta = nv.redacao ? nv.minProx + '+' : nv.minProx + '+ acertos';
-      var falta = !nv.prox ? 'faixa máxima!' : nv.seguidos ? nv.seguidos + ' de 5 simulados seguidos com ' + meta + ' para a ' + nv.prox.nome.toLowerCase()
-        : '5 simulados seguidos com ' + meta + ' conquistam a ' + nv.prox.nome.toLowerCase();
-      var mudou = nv.mudou > 0 ? el('span', { class: 'nv-mudou sobe', text: '↑ conquistou a ' + nv.faixa.nome.toLowerCase() + '!' }) : nv.mudou < 0 ? el('span', { class: 'nv-mudou desce', text: '↓ desceu da ' + nv.de.nome.toLowerCase() }) : null;
-      var risco = nv.risco ? el('span', { class: 'nv-risco', text: 'abaixo da ' + nv.faixa.nome.toLowerCase() + ' desde ' + (nv.risco.desde !== null ? dataBr(nv.risco.desde) : 'o último simulado') +
-        (nv.risco.ate !== null ? ': se seguir abaixo até ' + dataBr(nv.risco.ate) + ', desce para a ' + nv.risco.para.nome.toLowerCase() : '') }) : null;
-      gradeNv.appendChild(el('div', { class: 'card nv' }, [faixaSvg(nv.faixa, false, nv.graus), el('span', { class: 'nv-area', text: nv.area }),
-        el('span', { class: 'nv-metal', style: 'color:' + nv.faixa.texto, text: 'Faixa ' + nv.faixa.nome.toLowerCase() }), nv.graus ? el('span', { class: 'nv-graus', text: nv.graus + (nv.graus === 1 ? ' grau' : ' graus') }) : null, mudou,
-        el('span', { class: 'nv-prog', text: med }), pontos, el('span', { class: 'nv-prog', text: falta }), risco]));
+      var f = nv.n ? nv.faixa : FAIXAS[0];
+      gradeNv.appendChild(el('div', { class: 'card nv' + (nv.n ? '' : ' vazio-nv') }, [faixaSvg(f, false, nv.n ? nv.graus : 0),
+        el('span', { class: 'nv-area', text: nv.area }),
+        el('span', { class: 'nv-metal', style: 'color:' + (nv.n ? f.texto : '#9AA4B2'), text: nv.n ? 'Faixa ' + f.nome.toLowerCase() : 'Sem simulados' })]));
     });
-    var trilha = el('ul', { class: 'trilha' });
-    FAIXAS.forEach(function (f, k) { var ate = k < FAIXAS.length - 1 ? MIN_OBJ[k + 1] - 1 : 45; trilha.appendChild(el('li', {}, [faixaSvg(f, true), el('b', { text: f.nome }), ' ' + (k ? MIN_OBJ[k] + '–' + ate : 'até ' + ate)])); });
-    raiz.appendChild(el('div', { class: 'card' }, [gradeNv, el('p', { class: 'nota', text: (M ? 'O aluno conquista' : 'Você conquista') + ' uma faixa com 5 simulados seguidos no nível dela, e só desce se ficar abaixo dela por 3 semanas. Cada listra branca na ponteira é um grau: 1 acerto a mais na média dos últimos 5 = 1 grau, até 4; o grau conquistado fica e só recomeça quando a faixa muda. Na redação: azul a partir de 480, roxa 600, marrom 720, preta 900 e vermelha 960.' }), el('div', { style: 'margin-top:10px' }, [trilha])]));
+    raiz.appendChild(el('div', { class: 'card' }, [gradeNv]));
 
     // Evolução
     raiz.appendChild(el('div', { class: 'sec', text: M ? 'Evolução' : 'Sua evolução' }));
