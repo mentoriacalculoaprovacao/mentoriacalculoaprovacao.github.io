@@ -468,7 +468,7 @@ window.Registros = (function () {
           e.corrigido = novo ? hojeIso().split('-').reverse().join('/') : '';
           item.classList.add('saindo');
           setTimeout(desenharLista, 180);
-          if (novo) c.aviso('Corrigido! Sai da lista, mas continua na sua revisão espaçada.');
+          if (novo) c.aviso('Corrigido! Sai da sua lista, mas continua registrado para o seu mentor.');
           c.api('marcarCorrigido', { id: c.id, linha: e.linha, antes: dados, corrigido: novo }).then(function (x) {
             if (!x || !x.ok) { e.corrigido = antes; desenharLista(); c.aviso(msgErro(x), true); return; }
             e.corrigido = x.corrigido || '';
@@ -521,6 +521,7 @@ window.Registros = (function () {
     ['aula', 'Aula', '#c7d2fe', '#312e81'], ['combo', 'Combo aula + questões', '#7c3aed', '#ffffff'],
     ['questoes', 'Questões', '#a5f3fc', '#164e63'], ['consolidacao', 'Consolidação', '#5eead4', '#134e4a'],
     ['revisao', 'Revisão', '#fdba74', '#7c2d12'], ['simulado', 'Simulado', '#d946ef', '#ffffff'],
+    ['simfrag', 'Simulado fragmentado', '#f0abfc', '#701a75'],
     ['correcao', 'Correção de simulado', '#f5d0fe', '#701a75'], ['redacao', 'Redação', '#fda4af', '#881337'],
     ['refeicao', 'Refeição/pausa', '#ffedd5', '#9a3412'], ['lazer', 'Lazer', '#fef08a', '#713f12'],
     ['outro', 'Outro', '#f1f5f9', '#334155']
@@ -592,7 +593,6 @@ window.Registros = (function () {
         return;
       }
       var hj = diaDeHoje();
-      if (!c.mentor) raiz.appendChild(cartaoHoje(r, hj));
       raiz.appendChild(el('div', { class: 'rotina-rolagem' }, [tabelaHoras(r, hj)]));
       raiz.appendChild(el('p', { class: 'nota', style: 'margin:0', text: 'No celular, deslize a tabela para o lado para ver todos os dias.' }));
     }
@@ -682,6 +682,13 @@ window.Registros = (function () {
       var ini = r.inicio, fim = r.fim;
       var cel = r.celulas.map(function (l) { return l.map(function (x) { return x ? { t: x.t, d: x.d || '', f: x.f || '' } : null; }); });
       var pincel = null, detalhePincel = '', sel = null, arrastando = false;
+      // Desfazer / refazer: fotografia da grade antes de cada mudança (até 50 passos)
+      var pilha = [], refazer = [];
+      function foto() { return JSON.stringify({ ini: ini, fim: fim, cel: cel }); }
+      function guardar() { pilha.push(foto()); if (pilha.length > 50) pilha.shift(); refazer = []; atualizarDesfazer(); }
+      function restaurar(txt) { var o = JSON.parse(txt); ini = o.ini; fim = o.fim; cel = o.cel; sIni.value = String(ini); sFim.value = String(fim); sel = null; mudou(); desenharGrade(); atualizarDesfazer(); }
+      function desfazer() { if (!pilha.length) return; refazer.push(foto()); restaurar(pilha.pop()); }
+      function refazerUm() { if (!refazer.length) return; pilha.push(foto()); restaurar(refazer.pop()); }
       var maxD = r.maxDetalhe || 80;
       raiz.innerHTML = '';
       cabecalho('Editando a rotina', 'Escolha uma atividade e clique (ou arraste) nos horários. Clicar num bloco ocupado troca pela atividade escolhida.', null);
@@ -707,15 +714,22 @@ window.Registros = (function () {
       var selFim = el('input', { type: 'time', step: '300', 'aria-label': 'Termina às' }), selApaga = el('button', { class: 'mini', type: 'button', text: 'Apagar bloco' });
       var selDica = el('span', { class: 'nota', style: 'margin:0', text: 'Toque num bloco para escrever um detalhe ou o horário em que ele termina.' });
       var selCampos = el('div', { class: 'sel-campos' }, [selRot, selDet, el('label', { class: 'sel-fim' }, ['termina às ', selFim]), selApaga]);
+      selDet.onfocus = function () { guardar(); };
       selDet.oninput = function () { if (!sel) return; var x = cel[sel.i][sel.j]; if (!x) return; x.d = selDet.value; redesenhar(sel.i, sel.j); mudou(); };
+      selFim.onfocus = function () { guardar(); };
       selFim.oninput = function () { if (!sel) return; var x = cel[sel.i][sel.j]; if (!x) return; x.f = selFim.value || ''; redesenhar(sel.i, sel.j); mudou(); };
-      selApaga.onclick = function () { if (!sel) return; cel[sel.i][sel.j] = null; redesenhar(sel.i, sel.j); mudou(); mostrarSel(); };
+      selApaga.onclick = function () { if (!sel) return; guardar(); cel[sel.i][sel.j] = null; redesenhar(sel.i, sel.j); mudou(); mostrarSel(); };
+      var btDesfazer = el('button', { class: 'mini', type: 'button', text: '↶ Desfazer (Ctrl+Z)' }), btRefazer = el('button', { class: 'mini', type: 'button', text: '↷ Refazer (Ctrl+Y)' });
+      var passos = el('span', { class: 'nota', style: 'margin:0' });
+      btDesfazer.onclick = desfazer; btRefazer.onclick = refazerUm;
+      function atualizarDesfazer() { btDesfazer.disabled = !pilha.length; btRefazer.disabled = !refazer.length; passos.textContent = pilha.length ? pilha.length + (pilha.length === 1 ? ' passo para desfazer' : ' passos para desfazer') : ''; }
 
       raiz.appendChild(el('div', { class: 'card ferramentas' }, [
         el('div', { class: 'ferr-linha' }, [el('span', { class: 'ferr-rot', text: 'Atividade:' }), paleta]),
         el('div', { class: 'ferr-linha' }, [el('span', { class: 'ferr-rot', text: 'Detalhe:' }), inDet, el('span', { class: 'nota dica-det', style: 'margin:0', text: 'vai junto nos próximos blocos que você colocar' }), avisoPincel]),
         el('div', { class: 'ferr-linha horas-linha' }, [el('span', { class: 'ferr-rot', text: 'Horário:' }), 'das ', sIni, ' às ', sFim]),
-        el('div', { class: 'ferr-linha sel-linha' }, [el('span', { class: 'ferr-rot', text: 'Bloco:' }), selDica, selCampos])
+        el('div', { class: 'ferr-linha sel-linha' }, [el('span', { class: 'ferr-rot', text: 'Bloco:' }), selDica, selCampos]),
+        el('div', { class: 'ferr-linha horas-linha' }, [el('span', { class: 'ferr-rot', text: 'Desfazer:' }), btDesfazer, btRefazer, passos])
       ]));
 
       var grade = el('div', { class: 'rotina-rolagem grade-edit' });
@@ -792,7 +806,7 @@ window.Registros = (function () {
         var td = ev.target.closest ? ev.target.closest('td[data-i]') : null;
         if (!td) return;
         var i = Number(td.getAttribute('data-i')), j = Number(td.getAttribute('data-j'));
-        if (pincel) { ev.preventDefault(); arrastando = aplicar(i, j); if (arrastando && grade.setPointerCapture) try { grade.setPointerCapture(ev.pointerId); } catch (e) { } }
+        if (pincel) { ev.preventDefault(); guardar(); arrastando = aplicar(i, j); if (!arrastando) { pilha.pop(); atualizarDesfazer(); } if (arrastando && grade.setPointerCapture) try { grade.setPointerCapture(ev.pointerId); } catch (e) { } }
         else clicar(i, j);
       });
       grade.addEventListener('pointermove', function (ev) {
@@ -807,7 +821,14 @@ window.Registros = (function () {
       var parar = function () { arrastando = false; };
       grade.addEventListener('pointerup', parar); grade.addEventListener('pointercancel', parar);
       grade.addEventListener('pointerleave', function () { fantasma.style.display = 'none'; });
-      var teclaEsc = function (ev) { if (ev.key === 'Escape' && pincel) escolher(null); };
+      var teclaEsc = function (ev) {
+        if (ev.key === 'Escape' && pincel) { escolher(null); return; }
+        var t = ev.target, emCampo = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT');
+        if (emCampo || !(ev.ctrlKey || ev.metaKey)) return; // dentro de um campo, o Ctrl+Z é o do próprio campo
+        var k = String(ev.key).toLowerCase();
+        if (k === 'z' && !ev.shiftKey) { ev.preventDefault(); desfazer(); }
+        else if (k === 'y' || (k === 'z' && ev.shiftKey)) { ev.preventDefault(); refazerUm(); }
+      };
       document.addEventListener('keydown', teclaEsc);
       function sair() { fecharEditor(); }
       limparEditor = function () { document.removeEventListener('keydown', teclaEsc); fantasma.remove(); document.body.classList.remove('editando-rotina'); };
@@ -816,6 +837,7 @@ window.Registros = (function () {
         if (nFim < nIni) { var tmp = nIni; nIni = nFim; nFim = tmp; sIni.value = String(nIni); sFim.value = String(nFim); }
         var perde = cel.some(function (l, i) { var h = ini + i; return (h < nIni || h > nFim) && l.some(Boolean); });
         if (perde && !window.confirm('Alguns horários que vão sair da grade têm atividades. Apagar esses blocos?')) { sIni.value = String(ini); sFim.value = String(fim); return; }
+        guardar();
         var nova = [];
         for (var h = nIni; h <= nFim; h++) nova.push(h >= ini && h <= fim ? cel[h - ini] : linhaNula());
         if (sel) { var hs = ini + sel.i; sel = hs >= nIni && hs <= nFim ? { i: hs - nIni, j: sel.j } : null; }
@@ -823,6 +845,7 @@ window.Registros = (function () {
       }
       desenharGrade();
       escolher(null);
+      atualizarDesfazer();
 
       cancelar.onclick = function () {
         var voltar = function () { sair(); rotina(raiz, c); };
@@ -1119,5 +1142,261 @@ window.Registros = (function () {
     }
   }
 
-  return { simulados: simulados, caderno: caderno, rotina: rotina, podeSair: podeSair, revisao: revisao, pdfsGestao: pdfsGestao, agenda: agenda, ETAPAS: ETAPAS };
+
+  // ===================== Metas do mês =====================
+  // O mentor cria, edita e apaga as metas do mês; o aluno só marca o que fez (e pode desmarcar). O servidor confere tudo.
+  var NOMES_MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  function nomeMes(m) { var p = String(m).split('-'); return NOMES_MESES[Number(p[1]) - 1] + ' de ' + p[0]; }
+  function somaMes(m, n) { var p = m.split('-'), d = new Date(Number(p[0]), Number(p[1]) - 1 + n, 15); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2); }
+  function fimDoMes(m) { var p = m.split('-'), d = new Date(Number(p[0]), Number(p[1]), 0); return m + '-' + ('0' + d.getDate()).slice(-2); }
+  function dataCurta(iso) { var p = String(iso || '').split('-'); return p.length === 3 ? p[2] + '/' + p[1] : ''; }
+  var mesMetas = null;
+
+  function caixaCheck(marcado, rotulo, aoMudar, desligado) {
+    var b = el('button', { class: 'check-corr', type: 'button', role: 'checkbox', 'aria-checked': String(!!marcado), 'aria-label': rotulo });
+    if (desligado) b.disabled = true; else b.onclick = aoMudar;
+    return b;
+  }
+
+  // Lista de metas de um mês. resumo = versão curta do painel (só o mês atual, sem navegação nem edição)
+  function metas(raiz, c, resumo) {
+    if (!resumo) carregando(raiz, 'Carregando metas…');
+    c.api('metas', { id: c.id }).then(function (r) {
+      if (!r || !r.ok) { if (resumo) raiz.innerHTML = ''; else falha(raiz, r); return; }
+      if (!resumo && !mesMetas) mesMetas = r.mesAtual;
+      desenhar(r, resumo ? r.mesAtual : mesMetas);
+    }).catch(function (e) { if (e.message !== 'sessao') { if (resumo) raiz.innerHTML = ''; else falha(raiz, null); } });
+
+    function desenhar(r, mes) {
+      raiz.innerHTML = '';
+      var lista = r.metas.filter(function (m) { return m.mes === mes; }).sort(function (a, b) { return a.prazo < b.prazo ? -1 : a.prazo > b.prazo ? 1 : 0; });
+      var feitas = lista.filter(function (m) { return m.feita; }).length;
+      var card = el('div', { class: 'card metas-card' });
+      var nav = null;
+      if (!resumo) {
+        var ant = el('button', { class: 'mini', type: 'button', 'aria-label': 'Mês anterior', text: '‹' }), prox = el('button', { class: 'mini', type: 'button', 'aria-label': 'Próximo mês', text: '›' });
+        ant.onclick = function () { mesMetas = somaMes(mes, -1); desenhar(r, mesMetas); };
+        prox.onclick = function () { mesMetas = somaMes(mes, 1); desenhar(r, mesMetas); };
+        nav = el('div', { class: 'mes-nav' }, [ant, el('b', { text: nomeMes(mes) }), prox]);
+      }
+      card.appendChild(el('div', { class: 'card-cab' }, [el('h3', { text: resumo ? 'Metas de ' + NOMES_MESES[Number(mes.slice(5)) - 1] : (c.mentor ? 'Metas do mês' : 'Minhas metas') }),
+        resumo ? el('span', { class: 'card-num', text: lista.length ? feitas + ' de ' + lista.length : '' }) : nav]));
+      if (!resumo && lista.length) card.appendChild(el('div', { class: 'barra-fina' }, [el('i', { style: 'width:' + Math.round(100 * feitas / lista.length) + '%' })]));
+      if (!lista.length) card.appendChild(el('p', { class: 'nota', style: 'margin:4px 0 0', text: r.podeEditar ? 'Nenhuma meta neste mês.' + (resumo ? ' Crie na aba Metas.' : '') : 'Seu mentor ainda não definiu as metas deste mês.' }));
+      lista.forEach(function (m) { card.appendChild(linhaMeta(r, m, mes)); });
+      if (!resumo && r.podeEditar) card.appendChild(formNova(r, mes));
+      if (resumo && !c.mentor && lista.length) card.appendChild(el('p', { class: 'nota', style: 'margin:8px 0 0', text: 'Marque quando cumprir. Quem define as metas é o seu mentor.' }));
+      raiz.appendChild(card);
+    }
+
+    function linhaMeta(r, m, mes) {
+      var atrasada = !m.feita && m.prazo && m.prazo < r.hoje;
+      var prazo = el('span', { class: 'meta-prazo' + (atrasada ? ' atrasada' : ''), text: atrasada ? 'atrasada' : m.prazo ? 'até ' + dataCurta(m.prazo) : '' });
+      var sub = m.feita ? (c.mentor ? 'feita em ' + m.feita : 'confirmada em ' + m.feita) : (c.mentor ? 'aguardando o aluno' : '');
+      var chk = caixaCheck(m.feita, 'Meta cumprida: ' + m.texto, function () {
+        var marcar = !m.feita; chk.disabled = true;
+        c.api('marcarMeta', { id: c.id, idMeta: m.id, feita: marcar }).then(function (x) {
+          if (x && x.ok) { m.feita = x.meta.feita; desenhar(r, resumo ? r.mesAtual : mes); } else { chk.disabled = false; c.aviso(msgErro(x)); }
+        }).catch(function () { chk.disabled = false; c.aviso('Sem conexão. Tente de novo.'); });
+      }, !r.podeMarcar);
+      var linha = el('div', { class: 'meta' + (m.feita ? ' feita' : '') }, [chk, el('div', { class: 'meta-txt' }, [el('b', { text: m.texto }), sub ? el('small', { text: sub }) : null]), prazo]);
+      if (!resumo && r.podeEditar) {
+        var editar = el('button', { class: 'mini', type: 'button', text: 'Editar' }), apagar = el('button', { class: 'mini', type: 'button', text: 'Apagar' });
+        var acoes = el('div', { class: 'meta-acoes' }, [editar, apagar]);
+        linha.appendChild(acoes);
+        editar.onclick = function () { linha.replaceWith(formMeta(r, mes, m)); };
+        apagar.onclick = function () {
+          confirmarInline(acoes, 'Apagar?', 'Apagar', function () {
+            c.api('apagarMeta', { id: c.id, idMeta: m.id }).then(function (x) {
+              if (x && x.ok) { r.metas = r.metas.filter(function (y) { return y.id !== m.id; }); desenhar(r, mes); c.aviso('Meta apagada.'); } else c.aviso(msgErro(x));
+            }).catch(function () { c.aviso('Sem conexão. Tente de novo.'); });
+          });
+        };
+      }
+      return linha;
+    }
+
+    function formMeta(r, mes, m) {
+      var t = el('input', { type: 'text', maxlength: String(r.maxTexto || 200), placeholder: 'Nova meta (ex.: 40 questões de Física)', 'aria-label': 'Meta' });
+      var d = el('input', { type: 'date', 'aria-label': 'Prazo' });
+      t.value = m ? m.texto : ''; d.value = m ? m.prazo : fimDoMes(mes);
+      var ok = el('button', { class: 'botao peq', type: 'button', text: m ? 'Salvar' : 'Adicionar' });
+      var cancelar = m ? el('button', { class: 'mini', type: 'button', text: 'Cancelar' }) : null;
+      var erro = el('span', { class: 'erro', style: 'margin:0;font-size:12.5px' });
+      var f = el('div', { class: 'meta-form' }, [t, d, ok, cancelar, erro]);
+      if (cancelar) cancelar.onclick = function () { desenhar(r, mes); };
+      t.onkeydown = function (ev) { if (ev.key === 'Enter') ok.click(); };
+      ok.onclick = function () {
+        erro.textContent = '';
+        if (!t.value.trim()) { erro.textContent = 'Escreva a meta.'; t.focus(); return; }
+        ok.disabled = true;
+        c.api('salvarMeta', { id: c.id, idMeta: m ? m.id : '', mes: mes, texto: t.value, prazo: d.value }).then(function (x) {
+          ok.disabled = false;
+          if (!x || !x.ok) { erro.textContent = msgErro(x); return; }
+          if (m) Object.assign(m, x.meta); else r.metas.push(x.meta);
+          desenhar(r, mes);
+        }).catch(function () { ok.disabled = false; erro.textContent = 'Sem conexão. Tente de novo.'; });
+      };
+      return f;
+    }
+
+    function formNova(r, mes) {
+      var w = el('div', {}, [formMeta(r, mes, null)]);
+      var anteriorPend = r.metas.some(function (m) { return m.mes === somaMes(mes, -1) && !m.feita; });
+      if (anteriorPend) {
+        var trazer = el('button', { class: 'mini', type: 'button', text: 'Trazer as pendentes de ' + NOMES_MESES[Number(somaMes(mes, -1).slice(5)) - 1] });
+        trazer.onclick = function () {
+          trazer.disabled = true;
+          c.api('trazerPendentes', { id: c.id, mes: mes }).then(function (x) {
+            if (x && x.ok) { r.metas = r.metas.concat(x.metas); desenhar(r, mes); c.aviso(x.trazidas ? x.trazidas + (x.trazidas === 1 ? ' meta trazida.' : ' metas trazidas.') : 'Nenhuma meta pendente para trazer.'); }
+            else { trazer.disabled = false; c.aviso(msgErro(x)); }
+          }).catch(function () { trazer.disabled = false; });
+        };
+        w.appendChild(el('div', { style: 'margin-top:8px' }, [trazer]));
+      }
+      return w;
+    }
+  }
+
+  // ===================== Cronograma de tópicos =====================
+  // Lista única (aba "Cronograma" da planilha do app); o aluno marca os tópicos que já estudou. Os temas aparecem como referência.
+  var cronoMateria = null, cronoAbertos = {};
+  function estruturaCrono(itens) {
+    var mats = [], porMat = {};
+    itens.forEach(function (r) {
+      var m = porMat[r[1]];
+      if (!m) { m = porMat[r[1]] = { nome: r[1], conteudos: [], porC: {} }; mats.push(m); }
+      var ct = m.porC[r[2]];
+      if (!ct) { ct = m.porC[r[2]] = { nome: r[2], id: null, topicos: [] }; m.conteudos.push(ct); }
+      if (r[3]) ct.topicos.push({ id: r[0], nome: r[3], inclui: r[4] }); else ct.id = r[0];
+    });
+    mats.forEach(function (m) { m.conteudos.forEach(function (ct) { ct.ids = ct.topicos.length ? ct.topicos.map(function (t) { return t.id; }) : (ct.id ? [ct.id] : []); }); m.ids = [].concat.apply([], m.conteudos.map(function (ct) { return ct.ids; })); });
+    return mats;
+  }
+  function pctDe(ids, marc) { return ids.length ? Math.round(100 * ids.filter(function (i) { return marc[i]; }).length / ids.length) : 0; }
+
+  function cronograma(raiz, c, resumo) {
+    if (!resumo) carregando(raiz, 'Carregando cronograma…');
+    c.api('cronograma', { id: c.id }).then(function (r) {
+      if (!r || !r.ok) { if (resumo) raiz.innerHTML = ''; else falha(raiz, r); return; }
+      var mats = estruturaCrono(r.itens), marc = {};
+      r.marcados.forEach(function (i) { marc[i] = true; });
+      if (!cronoMateria || !mats.some(function (m) { return m.nome === cronoMateria; })) cronoMateria = mats.length ? mats[0].nome : null;
+      if (resumo) desenharResumo(mats, marc); else desenhar(r, mats, marc);
+    }).catch(function (e) { if (e.message !== 'sessao') { if (resumo) raiz.innerHTML = ''; else falha(raiz, null); } });
+
+    function desenharResumo(mats, marc) {
+      var todos = [].concat.apply([], mats.map(function (m) { return m.ids; })), n = todos.filter(function (i) { return marc[i]; }).length;
+      raiz.innerHTML = '';
+      var link = el('button', { class: 'link-btn', type: 'button', text: 'abrir o cronograma ›' });
+      link.onclick = function () { if (c.irPara) c.irPara('cronograma'); };
+      raiz.appendChild(el('div', { class: 'card' }, [el('div', { class: 'card-cab' }, [el('h3', { text: 'Cronograma' }), el('span', { class: 'card-num', text: pctDe(todos, marc) + '% concluído' })]),
+        el('div', { class: 'barra-fina' }, [el('i', { style: 'width:' + pctDe(todos, marc) + '%' })]),
+        el('p', { class: 'nota', style: 'margin:8px 0 0' }, [n + ' de ' + todos.length + ' tópicos · ', link])]));
+    }
+
+    function desenhar(r, mats, marc) {
+      raiz.innerHTML = '';
+      var todos = [].concat.apply([], mats.map(function (m) { return m.ids; }));
+      raiz.appendChild(el('div', { class: 'reg-topo' }, [el('div', {}, [el('h2', { class: 'reg-titulo', text: c.mentor ? 'Cronograma do aluno' : 'Cronograma' }),
+        el('p', { class: 'nota', style: 'margin:2px 0 0', text: c.mentor ? 'O aluno marca o que já estudou. Você também pode marcar ou corrigir.' : 'Marque os tópicos que você já estudou. A porcentagem sobe sozinha.' })])]));
+      var chips = el('div', { class: 'crono-chips' }, [el('span', { class: 'nota', style: 'margin:0;align-self:center', text: 'Geral ' + pctDe(todos, marc) + '% ·' })]);
+      mats.forEach(function (m) {
+        var b = el('button', { class: 'crono-chip', type: 'button', 'aria-pressed': String(m.nome === cronoMateria), text: m.nome + ' ' + pctDe(m.ids, marc) + '%' });
+        b.onclick = function () { cronoMateria = m.nome; desenhar(r, mats, marc); };
+        chips.appendChild(b);
+      });
+      raiz.appendChild(chips);
+      var m = mats.filter(function (x) { return x.nome === cronoMateria; })[0];
+      if (!m) return;
+      var feitos = m.ids.filter(function (i) { return marc[i]; }).length;
+      raiz.appendChild(el('div', { class: 'card crono-geral' }, [el('div', {}, [el('b', { text: m.nome }), el('div', { class: 'barra-fina', style: 'margin:8px 0 6px' }, [el('i', { style: 'width:' + pctDe(m.ids, marc) + '%' })]),
+        el('span', { class: 'nota', style: 'margin:0', text: feitos + ' de ' + m.ids.length + ' tópicos estudados' })]), el('b', { class: 'crono-pct', text: pctDe(m.ids, marc) + '%' })]));
+      m.conteudos.forEach(function (ct) {
+        var chave = m.nome + '|' + ct.nome, p = pctDe(ct.ids, marc), n = ct.ids.filter(function (i) { return marc[i]; }).length;
+        var area = el('div', { class: 'crono-area' });
+        var barra = el('div', { class: 'barra-fina' }, [el('i', { style: 'width:' + p + '%' })]);
+        if (!ct.topicos.length) {
+          area.appendChild(el('div', { class: 'crono-lin' }, [caixa(ct.ids), el('span', { class: n ? 'ok' : '', text: ct.nome }), barra, el('span', { class: 'crono-pc', text: p + '%' })]));
+        } else {
+          var aberto = !!cronoAbertos[chave];
+          var cab = el('button', { class: 'crono-lin cab', type: 'button', 'aria-expanded': String(aberto) }, [el('span', { class: 'chev' + (aberto ? ' on' : '') }),
+            el('span', { class: n === ct.ids.length ? 'ok' : '' }, [ct.nome, el('span', { class: 'nota', style: 'margin:0', text: ' · ' + n + ' de ' + ct.ids.length })]), barra, el('span', { class: 'crono-pc', text: p + '%' })]);
+          cab.onclick = function () { cronoAbertos[chave] = !aberto; desenhar(r, mats, marc); };
+          area.appendChild(cab);
+          if (aberto) {
+            var corpo = el('div', { class: 'crono-tops' });
+            if (r.podeMarcar) {
+              var todosF = n === ct.ids.length, bt = el('button', { class: 'mini', type: 'button', text: todosF ? 'Desmarcar todos' : 'Marcar todos deste conteúdo' });
+              bt.onclick = function () { marcar(ct.ids, !todosF, bt); };
+              corpo.appendChild(el('div', { class: 'crono-todos' }, [bt]));
+            }
+            ct.topicos.forEach(function (t) {
+              corpo.appendChild(el('label', { class: 'crono-top' }, [caixa([t.id]), el('span', {}, [el('b', { class: marc[t.id] ? 'ok' : '', text: t.nome }), t.inclui ? el('small', { text: 'inclui: ' + t.inclui.split(/;\s*/).join(' · ') }) : null])]));
+            });
+            area.appendChild(corpo);
+          }
+        }
+        raiz.appendChild(area);
+      });
+
+      function caixa(ids) {
+        var on = ids.every(function (i) { return marc[i]; });
+        var b = caixaCheck(on, 'Estudado', function (ev) { if (ev) ev.preventDefault(); marcar(ids, !on, b); }, !r.podeMarcar);
+        return b;
+      }
+      function marcar(ids, valor, botao) {
+        if (botao) botao.disabled = true;
+        ids.forEach(function (i) { if (valor) marc[i] = true; else delete marc[i]; }); // otimista: desenha já
+        desenhar(r, mats, marc);
+        c.api('marcarCronograma', { id: c.id, ids: ids, marcar: valor }).then(function (x) {
+          if (x && x.ok) return;
+          ids.forEach(function (i) { if (valor) delete marc[i]; else marc[i] = true; });
+          desenhar(r, mats, marc); c.aviso(msgErro(x));
+        }).catch(function () { ids.forEach(function (i) { if (valor) delete marc[i]; else marc[i] = true; }); desenhar(r, mats, marc); c.aviso('Sem conexão: a marcação não foi salva.'); });
+      }
+    }
+  }
+
+  // ===================== Painel: rotina de hoje + metas + cronograma (ao lado das faixas) =====================
+  function cartaoHojeRot(r, hj, c) {
+    var itens = [];
+    r.celulas.forEach(function (l, i) {
+      var x = l[hj], h = r.inicio + i;
+      if (!x) return;
+      var ult = itens[itens.length - 1];
+      if (ult && ult.fimH === h && ult.c.t === x.t && (!x.d || x.d === ult.c.d) && !ult.c.f) { ult.fimH = h + 1; if (x.f) ult.c = { t: ult.c.t, d: ult.c.d, f: x.f }; return; }
+      itens.push({ ini: h, fimH: h + 1, c: x });
+    });
+    var link = el('button', { class: 'link-btn', type: 'button', text: 'Ver a semana inteira ›' });
+    link.onclick = function () { if (c.irPara) c.irPara('rotina'); };
+    var card = el('div', { class: 'card hoje-card' }, [el('div', { class: 'card-cab' }, [el('h3', { text: 'Hoje · ' + NOMES_DIAS[hj] }), link])]);
+    if (!itens.length) card.appendChild(el('p', { class: 'nota', style: 'margin:0', text: 'Dia livre na rotina.' }));
+    else {
+      var lista = el('div', { class: 'hoje-lista' });
+      itens.forEach(function (it) { lista.appendChild(el('div', { class: 'hoje-item' }, [el('span', { class: 'hoje-hora', text: hh(it.ini) + '–' + (it.c.f || hh(it.fimH)) }), bloco(it.c)])); });
+      card.appendChild(lista);
+    }
+    return card;
+  }
+  function painelExtra(raiz, c) {
+    raiz.innerHTML = '';
+    var f = c.fases || {};
+    var esq = el('div', { class: 'stack' }), dir = el('div', { class: 'stack' });
+    raiz.appendChild(el('div', { class: 'painel-lado' }, [esq, dir]));
+    if (f.rotina) {
+      var rot = el('div', {});
+      esq.appendChild(rot);
+      c.api('rotina', { id: c.id }).then(function (r) {
+        if (r && r.ok && r.formato === 'horas' && r.celulas.some(function (l) { return l.some(Boolean); })) rot.appendChild(cartaoHojeRot(r, diaDeHoje(), c));
+        else if (r && r.ok) rot.appendChild(el('div', { class: 'card' }, [el('div', { class: 'card-cab' }, [el('h3', { text: 'Rotina' })]), el('p', { class: 'nota', style: 'margin:0', text: c.mentor ? 'A rotina por hora deste aluno ainda não foi montada.' : 'Seu mentor ainda não montou a sua rotina por hora.' })]));
+      }).catch(function () { });
+    }
+    if (f.metas) { var mt = el('div', {}); dir.appendChild(mt); metas(mt, c, true); }
+    if (f.cronograma) { var cr = el('div', {}); dir.appendChild(cr); cronograma(cr, c, true); }
+    if (!f.rotina) { esq.remove(); }
+  }
+
+  return { simulados: simulados, caderno: caderno, rotina: rotina, podeSair: podeSair, revisao: revisao, pdfsGestao: pdfsGestao, agenda: agenda, ETAPAS: ETAPAS,
+    metas: metas, cronograma: cronograma, painelExtra: painelExtra, estruturaCrono: estruturaCrono };
 })();

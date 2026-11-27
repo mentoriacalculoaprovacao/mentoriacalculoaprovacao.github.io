@@ -4,7 +4,9 @@
 const {chromium}=require('playwright');
 const SITE='file://'+require('path').resolve(__dirname,'..','index.html');
 function novoServidor(){
-  const st={lanc:[{id:'',origem:'formulario',prova:'SAS 1 2024',chave:'sas12024',dia:1,data:'01/10/2026',dataIso:'2026-10-01',L:30,H:28,N:null,M:null,C:[160,160,140,160,120],quando:1}],
+  const st={metas:[{id:'M1',mes:'2026-11',texto:'Fazer 3 simulados',prazo:'2026-11-30',feita:''},{id:'M2',mes:'2026-12',texto:'Corrigir o caderno de Física',prazo:'2026-12-10',feita:''},{id:'M3',mes:'2026-12',texto:'Revisar Química',prazo:'2026-12-01',feita:'01/12'}],cronoMarc:['c3'],
+    cronoItens:[['c1','Química','Análise Gráfica','',''],['c2','Química','Físico-química','Cinética Química','Lei cinética; Teoria de colisões'],['c3','Química','Físico-química','Eletroquímica','Eletrólise; Pilhas'],['c4','Química','Físico-química','Soluções','Diluição'],['c5','Física','Mecânica','Cinemática','MRU; MRUV']],
+    lanc:[{id:'',origem:'formulario',prova:'SAS 1 2024',chave:'sas12024',dia:1,data:'01/10/2026',dataIso:'2026-10-01',L:30,H:28,N:null,M:null,C:[160,160,140,160,120],quando:1}],
     erros:[{linha:3,simulado:'SAS 1 2024',materia:'Química',parte:'Estequiometria',motivo:'Erro de cálculo',questao:'',data:'2026-10-20'}],seq:1,log:[],revs:[],baixados:[],
     pdfs:[{id:'P1',titulo:'Simulado Cálculo Aprovação 1',descricao:'Dia 1 e Dia 2',tamanho:2400000,liberarEm:'2026-10-30',liberado:true,downloads:0},
       {id:'P2',titulo:'Simulado Cálculo Aprovação 2',descricao:'',tamanho:900000,liberarEm:'2099-01-01',liberado:false,downloads:0}],
@@ -21,8 +23,15 @@ function novoServidor(){
     switch(req.acao){
       case 'config': return {ok:true,aceitaCodigo:true,google:false};
       case 'entrar': return {ok:true,sessao:'S',quem:{nome:papel==='mentor'?'Mentor Exemplo':'Aluna Exemplo',via:'codigo',aluno:papel==='aluno',mentor:papel==='mentor'}};
-      case 'inicio': return papel==='aluno'?{ok:true,papel:'aluno',quem:{nome:'Aluna Exemplo',via:'codigo',aluno:true},fases:{lancamentos:true,caderno:true,diagnostico:true,rotina:true,revisao:true,pdfs:true},atualizado:'31/10/2026',dados:dados()}
-        :{ok:true,papel:'mentor',quem:{nome:'Mentor Exemplo',via:'codigo',mentor:true},fases:{lancamentos:true,caderno:true,diagnostico:true,rotina:true,revisao:true,pdfs:true},atualizado:'31/10/2026',alunos:[{id:'A1',aluno:'Aluna Exemplo',mentor:'Mentor Exemplo',nSims:1}],mentores:[],meuMentor:'Mentor Exemplo'};
+      case 'inicio': return papel==='aluno'?{ok:true,papel:'aluno',quem:{nome:'Aluna Exemplo',via:'codigo',aluno:true},fases:{lancamentos:true,caderno:true,diagnostico:true,rotina:true,revisao:true,pdfs:true,metas:true,cronograma:true},atualizado:'31/10/2026',dados:dados()}
+        :{ok:true,papel:'mentor',quem:{nome:'Mentor Exemplo',via:'codigo',mentor:true},fases:{lancamentos:true,caderno:true,diagnostico:true,rotina:true,revisao:true,pdfs:true,metas:true,cronograma:true},atualizado:'31/10/2026',alunos:[{id:'A1',aluno:'Aluna Exemplo',mentor:'Mentor Exemplo',nSims:1}],mentores:[],meuMentor:'Mentor Exemplo'};
+      case 'metas': return {ok:true,metas:st.metas,hoje:'2026-12-05',mesAtual:'2026-12',podeEditar:papel!=='aluno',podeMarcar:papel==='aluno',maxTexto:200};
+      case 'salvarMeta':{ if(papel==='aluno') return {ok:false,erro:'soMentor',msg:'Só o mentor do aluno (ou o gestor) cria e edita metas.'}; let m=st.metas.find(x=>x.id===req.idMeta); if(m){m.texto=req.texto;m.prazo=req.prazo;} else {m={id:'M'+(++st.seq),mes:req.mes,texto:req.texto,prazo:req.prazo||'2026-12-31',feita:''};st.metas.push(m);} return {ok:true,meta:m}; }
+      case 'apagarMeta': if(papel==='aluno') return {ok:false,erro:'soMentor'}; st.metas=st.metas.filter(x=>x.id!==req.idMeta); return {ok:true};
+      case 'marcarMeta':{ if(papel!=='aluno') return {ok:false,erro:'soAluno',msg:'Só o próprio aluno marca as metas que cumpriu.'}; const m=st.metas.find(x=>x.id===req.idMeta); m.feita=req.feita?'05/12':''; return {ok:true,meta:m}; }
+      case 'trazerPendentes':{ const ant=st.metas.filter(x=>x.mes==='2026-11'&&!x.feita).map(x=>({id:'M'+(++st.seq),mes:req.mes,texto:x.texto,prazo:'2026-12-31',feita:''})); st.metas.push(...ant); return {ok:true,trazidas:ant.length,metas:ant}; }
+      case 'cronograma': return {ok:true,itens:st.cronoItens,marcados:st.cronoMarc,podeMarcar:true};
+      case 'marcarCronograma':{ const s2=new Set(st.cronoMarc); req.ids.forEach(i=>req.marcar?s2.add(i):s2.delete(i)); st.cronoMarc=[...s2]; st.cronoLog=(st.cronoLog||[]).concat([[papel,req.ids.join(','),req.marcar]]); return {ok:true,marcados:st.cronoMarc}; }
       case 'salvarBaseEnem': if(papel==='aluno') return {ok:false,erro:'soMentor'}; st.base=req.base; return {ok:true,base:req.base};
       case 'aluno': return {ok:true,aluno:Object.assign({id:'A1',codigo:'AB12-CD34',diagnostico:{'Prontidão (0–100)':'60'}},dados())};
       case 'simulados': return {ok:true,catalogo:[{nome:'SAS 1 2024',chave:'sas12024',alunos:3,ultimo:1},{nome:'Bernoulli 2 2025',chave:'bernoulli22025',alunos:2,ultimo:0}],lancamentos:st.lanc.slice().sort((a,b)=>b.quando-a.quando)};
@@ -66,11 +75,18 @@ function novoServidor(){
   await p.addInitScript(()=>{try{localStorage.clear()}catch(e){}});
   await p.goto(SITE);await p.waitForTimeout(300);
   await p.fill('input[aria-label="Código de acesso"]','ABCD-EFGH');await p.click('text=Entrar com o código');await p.waitForTimeout(600);
-  ok((await p.$$('.caixa')).length===4,'aluno vê as 4 caixas');
   ok((await p.textContent('.grade4')).includes('Química – Estequiometria'),'cartão de erros mostra Matéria – Tema');
-  ok((await p.$$eval('.sec',x=>x.map(y=>y.textContent))).includes('Temas com mais erros')&&!(await p.content()).includes('Por que você erra'),'"Por que você erra" virou "Temas com mais erros"');
+  ok(!(await p.$$eval('.sec',x=>x.map(y=>y.textContent))).some(t=>/Onde|Temas com mais erros/.test(t))&&!(await p.$('.rev-linha')),'aluno não vê "onde focar", "temas com mais erros" nem a revisão espaçada');
   ok((await p.textContent('.caixa[aria-pressed="true"]')).includes('Meu painel'),'começa em Meu painel');
-  ok((await p.textContent('.rev-linha.primeiro')).includes('Química – Estequiometria')&&(await p.$$('.rev-etapas i')).length===6,'revisão de hoje no painel, com o tema vencido e as 6 etapas');
+  ok((await p.$$('.caixa')).length===6,'aluno vê 6 caixas (com Metas e Cronograma)');
+  await p.waitForTimeout(300);
+  ok(!!(await p.$('.painel-extra .hoje-card'))&&(await p.textContent('.painel-extra .hoje-card')).includes('Hoje ·'),'painel mostra a rotina de hoje ao lado das faixas');
+  ok((await p.textContent('.painel-extra .metas-card')).includes('Metas de dezembro')&&(await p.$$('.painel-extra .meta')).length===2,'painel mostra as metas do mês atual');
+  ok((await p.textContent('.painel-extra')).includes('20% concluído'),'painel mostra o resumo do cronograma (1 de 5)');
+  await p.screenshot({path:__dirname+'/aluno_painel_novo.png',fullPage:true});
+  await p.click('.painel-extra .meta:has-text("Corrigir o caderno") .check-corr');await p.waitForTimeout(300);
+  ok(srv.st.metas.find(m=>m.id==='M2').feita==='05/12'&&(await p.$('.painel-extra .meta.feita:has-text("Corrigir o caderno")')),'aluno marca a meta como feita');
+  ok(!(await p.$('.painel-extra .meta-acoes')),'aluno não tem botões de editar ou apagar meta');
   // ---------- regras da agenda (7 dias × 1,4 até 30) ----------
   const ag=await p.evaluate(()=>{const A=window.Registros.agenda,E=[{materia:'Física',tema:'Óptica',data:'2026-10-01',questao:'101',simulado:'S'}];
     const seq=[],revs=[];let hoje='2026-10-08';
@@ -86,18 +102,23 @@ function novoServidor(){
   ok(ag.fac[0]===18&&ag.fac[1]==='2026-11-06','fácil multiplica por 1,6 (7 → 11 → 18) '+ag.fac);
   ok(ag.difLongo[0]===7&&ag.difLongo[1]==='2026-11-08','difícil corta o intervalo pela metade (14 → 7) '+ag.difLongo);
   ok(ag.novo[0]==='2026-10-19'&&ag.novo[1]===2,'erro novo no tema (grafia diferente) recomeça em 7 dias');
-  ok((await p.$$('.rev-linha .nivel')).length===3&&await p.$eval('.nivel.facil',e=>getComputedStyle(e).backgroundColor)==='rgb(221, 243, 230)','três botões (fácil verde, médio amarelo, difícil vermelho) em tons pastel');
-  await p.screenshot({path:__dirname+'/aluno_revisao.png',clip:{x:0,y:250,width:1100,height:260}});
-  await p.click('.rev-linha button.nivel.medio');await p.waitForTimeout(300);
-  ok(srv.st.revs.length===1&&srv.st.revs[0].resultado==='medio','marca a revisão no servidor');
-  ok((await p.textContent('.toast')).includes('Próxima revisão em 10 dias (qui 12/11)'),'avisa a próxima revisão (10 dias depois)');
-  ok((await p.textContent('.rev')).includes('Tudo em dia'),'tema revisado sai da lista de hoje');
-  ok((await p.textContent('.rev-linha .grifo'))==='Pode adiantar'&&(await p.textContent('.rev-linha small')).startsWith('qui 12/11'),'mostra a próxima revisão com "Pode adiantar"');
-  ok(await p.$eval('.grifo',e=>getComputedStyle(e).color)==='rgb(22, 32, 46)','"Pode adiantar" em preto com grifo azul');
-  await p.click('.rev-linha button.nivel.facil');await p.waitForTimeout(300);
-  ok(srv.st.revs.length===2&&srv.st.revs[1].resultado==='facil','adiantar registra a revisão hoje');
-  ok((await p.textContent('.toast')).includes('Revisão adiantada. Próxima revisão em 16 dias'),'recalcula a partir de hoje (10 × 1,6 = 16 dias) '+(await p.textContent('.toast')));
-  await p.screenshot({path:__dirname+'/aluno_revisao_ok.png',clip:{x:0,y:250,width:1100,height:200}});
+  // ---------- aba Metas e aba Cronograma (aluno) ----------
+  await p.click('.caixa:has-text("Metas")');await p.waitForTimeout(300);
+  ok((await p.textContent('.mes-nav')).includes('dezembro de 2026')&&!(await p.$('.meta-form')),'aba Metas: mês atual, sem formulário para o aluno');
+  await p.click('.mes-nav button[aria-label="Mês anterior"]');await p.waitForTimeout(100);
+  ok((await p.textContent('.mes-nav')).includes('novembro de 2026')&&(await p.textContent('.metas-card')).includes('atrasada'),'navega para o mês anterior (meta vencida aparece atrasada)');
+  await p.click('.caixa:has-text("Cronograma")');await p.waitForTimeout(300);
+  ok((await p.$$('.crono-chip')).length===2&&(await p.textContent('.crono-geral')).includes('1 de 4'),'cronograma: matérias e contagem de tópicos');
+  await p.click('.crono-lin.cab:has-text("Físico-química")');await p.waitForTimeout(100);
+  ok((await p.$$('.crono-top')).length===3&&(await p.textContent('.crono-top')).includes('inclui: Lei cinética · Teoria de colisões'),'abre o conteúdo: tópicos com os temas como referência');
+  await p.click('.crono-top:has-text("Cinética") .check-corr');await p.waitForTimeout(300);
+  ok(srv.st.cronoMarc.includes('c2')&&(await p.textContent('.crono-geral')).includes('2 de 4'),'marca um tópico e a porcentagem sobe');
+  await p.click('button:has-text("Marcar todos deste conteúdo")');await p.waitForTimeout(300);
+  ok(['c2','c3','c4'].every(i=>srv.st.cronoMarc.includes(i)),'"Marcar todos" marca o conteúdo inteiro');
+  await p.click('.crono-lin:has-text("Análise Gráfica") .check-corr');await p.waitForTimeout(300);
+  ok(srv.st.cronoMarc.includes('c1')&&(await p.textContent('.crono-geral')).includes('100%'),'conteúdo sem tópicos vira um item só');
+  await p.screenshot({path:__dirname+'/aluno_cronograma.png',fullPage:true});
+  await p.click('.caixa:has-text("Meu painel")');await p.waitForTimeout(300);
   ok(!!(await p.$('.grade4')),'painel com os cartões dentro da caixa');
   await p.screenshot({path:__dirname+'/aluno_caixas.png'});
   await p.click('.caixa:has-text("Simulados")');await p.waitForTimeout(400);
@@ -185,7 +206,7 @@ function novoServidor(){
   await p.click('.item-erro:has-text("Q98") .check-corr');await p.waitForTimeout(500);
   ok(srv.st.erros.find(e=>e.questao==='98').corrigido==='04/11/2026','aluno marca o erro como corrigido (fica salvo)');
   ok(!(await p.$('.grupo-sim .item-erro:has-text("Q98")'))&&(await p.textContent('.grupo-sim:has-text("Bernoulli 2 2025") .grupo-cab .nota'))==='1 erro para corrigir','erro corrigido sai da lista do aluno');
-  ok((await p.textContent('.toast')).includes('continua na sua revisão'),'avisa que continua na revisão');
+  ok((await p.textContent('.toast')).includes('continua registrado para o seu mentor'),'avisa que continua registrado');
   ok((await p.textContent('.link-corrigidos'))==='Ver erros já corrigidos (1)','link para ver os corrigidos');
   await p.click('.link-corrigidos');await p.waitForTimeout(200);
   ok(!!(await p.$('.card.corrigidos .item-erro:has-text("Q98") .check-corr[aria-checked="true"]')),'corrigidos aparecem marcados ao abrir');
@@ -206,7 +227,7 @@ function novoServidor(){
   ok((await p.textContent('table.rotina.horas tbody tr:nth-child(3) td:nth-child(2)')).includes('Matemática'),'detalhe aparece no bloco (escola · Matemática)');
   ok((await p.textContent('table.rotina.horas tbody tr:nth-child(14) td:nth-child(2)')).includes('até 19:30'),'mostra a hora em que a atividade termina');
   ok(!(await p.$('text=Editar rotina')),'aluno não tem botão de editar');
-  ok(!!(await p.$('.hoje-card')),'mostra o bloco de hoje');
+  ok(!(await p.$('.hoje-card'))&&!(await p.$('text=Editar rotina')),'aba Rotina do aluno: semana inteira, só para ver (o "hoje" fica no painel)');
   await p.screenshot({path:__dirname+'/aluno_rotina.png',fullPage:true});
   await p.setViewportSize({width:390,height:900});await p.waitForTimeout(200);
   await p.screenshot({path:__dirname+'/aluno_rotina_celular.png',fullPage:true});
@@ -223,7 +244,7 @@ function novoServidor(){
   await p.goto(SITE);await p.waitForTimeout(300);
   await p.fill('input[aria-label="Código de acesso"]','ABCD-EFGH');await p.click('text=Entrar com o código');await p.waitForTimeout(700);
   const abas=await p.$$eval('.aba',a=>a.map(x=>x.textContent));
-  ok(JSON.stringify(abas)===JSON.stringify(['Painel','Simulados','Caderno de erros','Rotina','Diagnóstico']),'mentor tem Painel, Simulados, Caderno, Rotina e Diagnóstico');
+  ok(JSON.stringify(abas)===JSON.stringify(['Painel','Simulados','Caderno de erros','Rotina','Metas','Cronograma','Diagnóstico']),'mentor tem Painel, Simulados, Caderno, Rotina, Metas, Cronograma e Diagnóstico');
   // base do ENEM: mentor edita no painel e a faixa parte dela
   ok((await p.textContent('.base-enem')).includes('Cadastrar notas do ENEM'),'painel do mentor oferece cadastrar as notas do ENEM');
   await p.click('.base-enem button');
@@ -254,7 +275,7 @@ function novoServidor(){
   ok((await p.textContent('.reg-topo .nota')).includes('Só você, como mentor dele'),'mentor cadastrado vê que pode editar');
   await p.click('text=Editar rotina');await p.waitForTimeout(200);
   const td=(i,j)=>`.grade-edit td[data-i="${i}"][data-j="${j}"]`;
-  ok((await p.$$('.paleta-ativ .ativ')).length===16&&(await p.$$('.grade-edit tbody tr')).length===18,'editor com as atividades prontas e a grade por hora');
+  ok((await p.$$('.paleta-ativ .ativ')).length===17&&!!(await p.$('.ativ:has-text("Simulado fragmentado")'))&&(await p.$$('.grade-edit tbody tr')).length===18,'editor com as atividades prontas e a grade por hora');
   // escolhe a atividade (fica "na mão") e clica no horário vago
   await p.click('.ativ:has-text("Simulado")');
   ok(await p.getAttribute('.ativ:has-text("Simulado")','aria-pressed')==='true','atividade fica selecionada');
@@ -273,6 +294,15 @@ function novoServidor(){
   // borracha
   await p.click('.ativ:has-text("Borracha")');await p.click(td(0,6));
   ok(!(await p.textContent(td(0,6))).trim(),'borracha apaga o bloco');
+  await p.keyboard.press('Control+z');await p.waitForTimeout(100);
+  ok((await p.textContent(td(0,6))).includes('Sono'),'Ctrl+Z desfaz a última mudança');
+  await p.keyboard.press('Control+y');await p.waitForTimeout(100);
+  ok(!(await p.textContent(td(0,6))).trim(),'Ctrl+Y refaz');
+  await p.click('button:has-text("Desfazer (Ctrl+Z)")');await p.waitForTimeout(100);
+  ok((await p.textContent(td(0,6))).includes('Sono'),'botão Desfazer também funciona');
+  await p.click('button:has-text("Refazer (Ctrl+Y)")');await p.waitForTimeout(100);
+  await p.click('.ativ:has-text("Simulado fragmentado")');await p.fill('.ferramentas input[aria-label="Detalhe dos próximos blocos"]','Natureza: 15 questões cronometradas, 3 minutos por questão, corrigir no fim');await p.click(td(8,6));await p.waitForTimeout(50);
+  ok((await p.textContent(td(8,6))).includes('corrigir no fim')&&await p.$eval(td(8,6)+' .blk small',e=>getComputedStyle(e).whiteSpace)==='normal'&&await p.$eval(td(8,6)+' .blk small',e=>e.scrollWidth<=e.clientWidth+1),'detalhe longo aparece inteiro (quebra de linha, sem cortar)');
   // "Outro" sem nome pede o detalhe
   await p.click('.ativ:has-text("Outro")');await p.fill('.ferramentas input[aria-label="Detalhe dos próximos blocos"]','');await p.click(td(9,6));
   ok(!(await p.textContent(td(9,6))).trim()&&(await p.textContent('.ferramentas')).includes('escreva o nome da atividade'),'"Outro" exige um nome');
@@ -311,6 +341,24 @@ function novoServidor(){
   await p.click('text=Montar rotina por hora');await p.waitForTimeout(200);
   await p.click('.ativ:has-text("Redação")');await p.click(td(12,2));await p.click('text=Salvar rotina');await p.waitForTimeout(400);
   ok(!srv.st.usaLivre&&srv.st.rot.celulas[12][2].t==='redacao'&&!!(await p.$('table.rotina.horas')),'salvar troca para a grade por hora');
+  // ---------- Metas (mentor) ----------
+  await p.click('.aba:has-text("Metas")');await p.waitForTimeout(300);
+  ok(!!(await p.$('.meta-form'))&&(await p.$$('.meta-acoes')).length===2,'mentor tem formulário e botões de editar/apagar');
+  ok(await p.$eval('.meta .check-corr',b=>b.disabled),'mentor não marca a meta pelo aluno');
+  await p.fill('.meta-form input[type=text]','40 questões de Física');await p.click('.meta-form button:has-text("Adicionar")');await p.waitForTimeout(300);
+  ok(srv.st.metas.some(m=>m.texto==='40 questões de Física'&&m.mes==='2026-12'&&m.prazo==='2026-12-31'),'cria meta no mês, com prazo no fim do mês');
+  await p.click('button:has-text("Trazer as pendentes de novembro")');await p.waitForTimeout(300);
+  ok(srv.st.metas.filter(m=>m.mes==='2026-12'&&m.texto==='Fazer 3 simulados').length===1,'traz as pendentes do mês anterior');
+  await p.click('.meta:has-text("40 questões") button:has-text("Editar")');await p.fill('.meta-form input[type=text] >> nth=0','45 questões de Física');await p.click('.meta-form button:has-text("Salvar")');await p.waitForTimeout(300);
+  ok(srv.st.metas.some(m=>m.texto==='45 questões de Física'),'edita a meta');
+  await p.click('.meta:has-text("45 questões") button:has-text("Apagar")');await p.click('.meta:has-text("45 questões") button.perigo');await p.waitForTimeout(300);
+  ok(!srv.st.metas.some(m=>m.texto==='45 questões de Física'),'apaga a meta (com confirmação)');
+  await p.screenshot({path:__dirname+'/mentor_metas.png',fullPage:true});
+  await p.click('.aba:has-text("Cronograma")');await p.waitForTimeout(300);
+  await p.click('.crono-chip:has-text("Física")');await p.waitForTimeout(100);await p.click('.crono-lin.cab:has-text("Mecânica")');await p.click('.crono-top:has-text("Cinemática") .check-corr');await p.waitForTimeout(300);
+  ok(srv.st.cronoLog.some(l=>l[0]==='mentor'&&l[1]==='c5'),'mentor também pode marcar no cronograma');
+  await p.click('.aba:has-text("Painel")');await p.waitForTimeout(400);
+  ok((await p.$$eval('.sec',x=>x.map(y=>y.textContent))).some(t=>/Onde intervir/.test(t)),'mentor ainda vê "onde intervir"');
   // gestor (ou mentor de outro aluno): só visualiza
   srv.st.soVer=true;await p.click('.aba:has-text("Rotina")');await p.waitForTimeout(400);
   ok(!(await p.$('text=Editar rotina'))&&!(await p.$('text=Montar rotina'))&&(await p.textContent('.reg-topo .nota')).includes('só visualiza'),'quem não é o mentor cadastrado só visualiza');

@@ -340,6 +340,8 @@ window.Painel = (function () {
     var cardFx = el('div', { class: 'card' });
     raiz.appendChild(cardFx);
     desenharFaixas(cardFx, d, r, M && opts.ctx && d.codigo !== undefined ? opts.ctx : null);
+    // Rotina de hoje, metas e cronograma (carregados à parte, pelo app.js)
+    if (opts.extra) { var extra = el('div', { class: 'painel-extra' }); raiz.appendChild(extra); opts.extra(extra); }
 
 
     // Evolução
@@ -348,11 +350,12 @@ window.Painel = (function () {
     AREAS.forEach(function (x) { leg.appendChild(el('li', {}, [el('span', { class: 'sw', style: 'background:' + x[2] }), x[1]])); });
     raiz.appendChild(el('div', { class: 'card graf' }, r.sims.length ? [grafico(r.sims), leg, el('p', { class: 'nota', text: 'Acerto em cada simulado: acertos ÷ 45 nas objetivas e nota ÷ 1000 na redação.' })] : [el('p', { class: 'vazio', text: M ? 'O gráfico aparece quando o aluno lançar o primeiro simulado.' : 'Seu gráfico aparece quando você lançar o primeiro simulado.' })]));
 
-    // Onde focar
-    raiz.appendChild(el('div', { class: 'sec', text: M ? 'Onde intervir' : 'Onde focar' }));
+    // Onde intervir (pontos fortes e fracos) e temas com mais erros: só na visão do mentor; para o aluno, quem analisa é o mentor
+    if (M) {
+    raiz.appendChild(el('div', { class: 'sec', text: 'Onde intervir (só o mentor vê)' }));
     var cont = [0, 0, 0, 0]; r.intervir.forEach(function (x) { cont[x.grupo]++; });
     var faixa = el('div', { class: 'faixa' }); cont.forEach(function (n, g) { if (n) faixa.appendChild(el('span', { style: 'flex:' + n + ';background:' + GRUPOS[g][1] })); });
-    var foco = el('div', { class: 'card' }, [el('p', { class: 'nota', style: 'margin:0', text: 'Cada matéria entra pelo acerto da área dela no último simulado e pelos erros do ' + (M ? 'caderno do aluno.' : 'seu caderno.') }), faixa]);
+    var foco = el('div', { class: 'card' }, [el('p', { class: 'nota', style: 'margin:0', text: 'Cada matéria entra pelo acerto da área dela no último simulado e pelos erros do caderno do aluno.' }), faixa]);
     GRUPOS.forEach(function (gr, g) {
       var itens = r.intervir.filter(function (x) { return x.grupo === g; });
       var lista = el('div', { class: 'lista' });
@@ -381,6 +384,7 @@ window.Painel = (function () {
     r.temas.slice(0, 8).forEach(function (t, i) { cad.appendChild(el('div', { class: 'motivo' }, [el('span', { text: t.rotulo }), el('div', { class: 'barra' }, [el('span', { style: 'width:' + Math.round(t.n / maxT * 100) + '%;background:' + (i ? '#AAB3C0' : 'var(--azul)') })]), el('b', { text: String(t.n) })])); });
     if (r.temas.length > 8) cad.appendChild(el('p', { class: 'nota', style: 'margin:8px 0 0', text: 'Mais ' + (r.temas.length - 8) + (r.temas.length - 8 === 1 ? ' tema' : ' temas') + ' no caderno de erros.' }));
     raiz.appendChild(cad);
+    }
     raiz.appendChild(el('p', { class: 'rodape', text: M ? 'Dados da planilha de mentoria e dos simulados lançados por este aluno. Você vê só os alunos cadastrados com você como mentor.' : 'Seus dados vêm da sua planilha de mentoria e dos simulados que você lançou. Dúvidas? Fale com seu mentor.' }));
   }
 

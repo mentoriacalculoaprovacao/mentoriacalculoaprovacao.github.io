@@ -209,7 +209,9 @@
     painel: ['M4 19V10M10 19V5M16 19v-7M22 19H2'],
     simulados: ['M9 5h11M9 12h11M9 19h11', 'M4 5l1 1 2-2M4 12l1 1 2-2M4 19l1 1 2-2'],
     caderno: ['M4 5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2z', 'M9 8l6 6M15 8l-6 6'],
-    rotina: ['M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z', 'M4 10h16M9 3v4M15 3v4', 'M8 14h3M13 14h3M8 17h3']
+    rotina: ['M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z', 'M4 10h16M9 3v4M15 3v4', 'M8 14h3M13 14h3M8 17h3'],
+    metas: ['M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z', 'M12 8a4 4 0 1 0 0 8a4 4 0 1 0 0-8z', 'M12 12h.01'],
+    cronograma: ['M5 4h14v17H5z', 'M9 9l2 2 4-4', 'M9 15h6']
   };
   function icone(nome) {
     var s = P.sv('svg', { viewBox: '0 0 24 24', width: 22, height: 22, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' });
@@ -221,10 +223,12 @@
     atualizadoEl.textContent = d.atualizado ? 'Atualizado em ' + d.atualizado : '';
     app.innerHTML = '';
     app.appendChild(P.cabecalhoAluno(d.dados));
-    var opcoes = [['painel', 'Meu painel', 'Acertos, níveis e onde focar']];
+    var opcoes = [['painel', 'Meu painel', 'Suas faixas e o seu dia']];
     if (d.fases && d.fases.lancamentos) opcoes.push(['simulados', 'Simulados', 'Lance e confira seus simulados']);
     if (d.fases && d.fases.caderno) opcoes.push(['caderno', 'Caderno de erros', 'Registre onde você errou']);
     if (d.fases && d.fases.rotina) opcoes.push(['rotina', 'Rotina', 'Sua semana organizada pelo mentor']);
+    if (d.fases && d.fases.metas) opcoes.push(['metas', 'Metas', 'As metas do mês']);
+    if (d.fases && d.fases.cronograma) opcoes.push(['cronograma', 'Cronograma', 'Marque o que já estudou']);
     if (!opcoes.some(function (o) { return o[0] === est.abaAluno; })) est.abaAluno = 'painel';
     var area = el('div', { class: 'aluno-area' });
     if (opcoes.length > 1) {
@@ -237,14 +241,14 @@
       app.appendChild(nav);
     }
     app.appendChild(area);
-    var ctx = { api: api, id: null, mentor: false, fases: d.fases || {}, aviso: aviso, aoMudar: function () { atualizarAluno(null); } };
+    var ctx = { api: api, id: null, mentor: false, fases: d.fases || {}, aviso: aviso, aoMudar: function () { atualizarAluno(null); },
+      irPara: function (aba) { if (!opcoes.some(function (o) { return o[0] === aba; }) || !R.podeSair()) return; est.abaAluno = aba; gravar('mentoria_aba_aluno', aba); montarAluno(); window.scrollTo(0, 0); } };
     if (est.abaAluno === 'simulados') R.simulados(area, ctx);
     else if (est.abaAluno === 'caderno') R.caderno(area, ctx);
     else if (est.abaAluno === 'rotina') R.rotina(area, ctx);
-    else {
-      if (ctx.fases.revisao) { var rev = el('div', {}); area.appendChild(rev); R.revisao(rev, ctx); }
-      P.montar(d.dados, { raiz: area, semCabecalho: true });
-    }
+    else if (est.abaAluno === 'metas') R.metas(area, ctx);
+    else if (est.abaAluno === 'cronograma') R.cronograma(area, ctx);
+    else P.montar(d.dados, { raiz: area, semCabecalho: true, extra: function (div) { R.painelExtra(div, ctx); } });
   }
 
   // Depois de lançar ou corrigir: sincroniza só aquele aluno em segundo plano e atualiza o painel
@@ -417,6 +421,8 @@
     if (!x.semPlanilha && fases.lancamentos) abas.push(['simulados', 'Simulados']);
     if (!x.semPlanilha && fases.caderno) abas.push(['caderno', 'Caderno de erros']);
     if (!x.semPlanilha && fases.rotina) abas.push(['rotina', 'Rotina']);
+    if (!x.semPlanilha && fases.metas) abas.push(['metas', 'Metas']);
+    if (!x.semPlanilha && fases.cronograma) abas.push(['cronograma', 'Cronograma']);
     if (temDiag) abas.push(['diagnostico', 'Diagnóstico']);
     if (!abas.some(function (a) { return a[0] === est.aba; })) est.aba = x.semPlanilha && temDiag ? 'diagnostico' : 'painel';
     var barraAbas = el('div', { class: 'abas', role: 'tablist' });
@@ -428,16 +434,16 @@
     });
     if (abas.length > 1) area.appendChild(barraAbas);
     area.appendChild(conteudo);
-    var ctx = { api: api, id: x.id, mentor: true, fases: fases, aviso: aviso, aoMudar: function () { atualizarAluno(x.id); } };
+    var ctx = { api: api, id: x.id, mentor: true, fases: fases, aviso: aviso, aoMudar: function () { atualizarAluno(x.id); },
+      irPara: function (aba) { if (!abas.some(function (a) { return a[0] === aba; }) || !R.podeSair()) return; est.aba = aba; gravar('mentoria_aba', aba); desenharAluno(area, x); } };
     if (est.aba === 'diagnostico' && temDiag) desenharDiagnostico(conteudo, x.diagnostico, x);
     else if (est.aba === 'simulados' && !x.semPlanilha) R.simulados(conteudo, ctx);
     else if (est.aba === 'caderno' && !x.semPlanilha) R.caderno(conteudo, ctx);
     else if (est.aba === 'rotina' && !x.semPlanilha) R.rotina(conteudo, ctx);
+    else if (est.aba === 'metas' && !x.semPlanilha) R.metas(conteudo, ctx);
+    else if (est.aba === 'cronograma' && !x.semPlanilha) R.cronograma(conteudo, ctx);
     else if (x.semPlanilha) conteudo.appendChild(el('div', { class: 'aviso', text: 'Este aluno respondeu o diagnóstico, mas as planilhas dele ainda não foram criadas. Elas são criadas automaticamente; se demorar, use Mentoria → "Criar planilhas dos alunos pendentes".' }));
-    else {
-      if (fases.revisao) { var rev = el('div', {}); conteudo.appendChild(rev); R.revisao(rev, ctx); }
-      P.montar(x, { mentor: true, raiz: conteudo, semCabecalho: true, ctx: ctx });
-    }
+    else P.montar(x, { mentor: true, raiz: conteudo, semCabecalho: true, ctx: ctx, extra: function (div) { R.painelExtra(div, ctx); } });
   }
 
   // Gestor: escolher o mentor responsável
