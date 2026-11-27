@@ -4,7 +4,7 @@ const ctx={window:{},document:{createElementNS(){return{setAttribute(){},appendC
 vm.createContext(ctx);vm.runInContext(fs.readFileSync(__dirname+'/../assets/painel.js','utf8'),ctx);
 const nivel=ctx.Painel.nivel;let falhas=0;const ok=(c,m)=>{console.log((c?'OK   ':'FALHA')+' '+m);if(!c)falhas++;};
 // simulados de 7 em 7 dias a partir de 01/09/2026
-const sims=v=>v.map((x,i)=>{const d=new Date(Date.UTC(2026,8,1+7*i));return {ordem:i+1,data:('0'+d.getUTCDate()).slice(-2)+'/'+('0'+(d.getUTCMonth()+1)).slice(-2)+'/2026',M:x};});
+const sims=v=>v.map((x,i)=>{const d=new Date(Date.UTC(2026,11,1+7*i));return {ordem:i+1,data:('0'+d.getUTCDate()).slice(-2)+'/'+('0'+(d.getUTCMonth()+1)).slice(-2)+'/'+d.getUTCFullYear(),M:x};});
 const n=v=>{const r=nivel(sims(v),'M','Matemática');return r.faixa.nome+' '+r.graus+'g';};
 ok(n([30,30,30,30])==='Branca 4g','menos de 5 simulados: continua branca (graus no máximo)');
 ok(n([22,22,22,22,22])==='Azul 1g','5 seguidos com 21+ conquistam a azul; 22 de média = 1 grau');
@@ -23,4 +23,11 @@ ok(n([43,44,45,43,43])==='Vermelha 0g','vermelha com 43+ em 5 seguidos, sem grau
 ok(n([16,17,18,19,20])==='Branca 2g','branca: 18 de média = 2 graus');
 const red=nivel(sims([900,920,940,960,980]).map(s=>({...s,R:s.M,M:null})),'R','Redação');
 ok(red.faixa.nome==='Preta'&&red.seguidos===2,'redação: 900+ em 5 seguidos = preta; 2 seguidos com 960+ rumo à vermelha');
+// simulados que já estavam no sistema (até 27/11/2026) definem a faixa de partida pela média
+const antigos=v=>v.map((x,i)=>({ordem:i+1,data:'0'+(i+1)+'/10/2026',M:x}));
+const n2=(a,b)=>{const r=nivel(antigos(a).concat(sims(b).map((s,i)=>({...s,ordem:a.length+i+1}))),'M','x');return r.faixa.nome+' '+r.graus+'g';};
+ok(n2([29,41,40,38,10,42],[])==='Marrom 3g','antes das regras: média dos últimos 5 (34,2) = marrom, 3 graus');
+ok(n2([38,40,20],[])==='Marrom 1g','antes das regras: menos de 5 simulados contam pela média (32,7)');
+ok(n2([29,41,40,38,10,42],[20])==='Marrom 3g','depois: um simulado abaixo não derruba (precisa de 3 semanas)');
+ok(n2([29,41,40,38,40,42],[40,40,40,40,40])==='Preta 4g','depois: 5 seguidos com 36+ conquistam a preta');
 console.log(falhas?falhas+' falha(s)':'TUDO OK');process.exit(falhas?1:0);

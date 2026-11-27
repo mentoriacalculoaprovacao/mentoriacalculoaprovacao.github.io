@@ -87,7 +87,9 @@ window.Painel = (function () {
   // Graus: 1 acerto de média (dos últimos 5) acima do início da faixa = 1 grau, até 4 (redação: 1/5 da faixa). Uma vez
   //   conquistado, o grau fica, mesmo que a média caia um pouco; só recomeça quando a faixa muda.
   // Tudo é recalculado do histórico, simulado a simulado, então não precisa guardar nada na planilha.
-  var CONQUISTA = 5, DIAS_QUEDA = 21, DIA_MS = 864e5;
+  // Simulados lançados até 27/11/2026 (quando as regras entraram) já contam: eles definem a faixa de partida pela média
+  // (dos últimos 5, ou de todos se forem menos). Daí em diante valem as regras de conquista e queda.
+  var CONQUISTA = 5, DIAS_QUEDA = 21, DIA_MS = 864e5, INICIO_REGRAS = Date.UTC(2026, 10, 28);
   function dataSim(s) {
     var t = String((s && (s.dataIso || s.data)) || ''), m;
     if ((m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t))) return Date.UTC(+m[1], m[2] - 1, +m[3]);
@@ -106,6 +108,10 @@ window.Painel = (function () {
     var st = { f: 0, g: 0, abaixo: null };
     lista.forEach(function (x, t) {
       var jan = lista.slice(Math.max(0, t - JANELA + 1), t + 1).map(function (y) { return y.v; }), m = media(jan);
+      if (x.d === null || x.d < INICIO_REGRAS) { // faixa de partida, pelos simulados que já estavam no sistema
+        st.f = indiceFaixa(m, mins); st.g = grauDe(m, st.f, mins, red); st.abaixo = null;
+        return;
+      }
       // queda: abaixo do mínimo da faixa por 3 semanas
       if (st.f > 0 && x.v < mins[st.f] - 1e-9) {
         if (!st.abaixo) st.abaixo = { d: x.d, i: t, vals: [] };
