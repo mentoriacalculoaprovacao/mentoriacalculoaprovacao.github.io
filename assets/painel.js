@@ -319,5 +319,5 @@ window.Painel = (function () {
       el('span', { text: d.curso ? 'Rumo a ' + d.curso : '' }), el('span', { text: d.mentor ? 'Mentor: ' + d.mentor : '' }), el('span', { text: d.desde ? 'Na mentoria desde ' + d.desde : '' })])]);
   }
 
-  return { nivel: nivel, montar: montar, cabecalhoAluno: cabecalhoAluno, el: el, sv: sv, norm: norm, pct: pct, ok: ok };
+  return { nivel: nivel, faixaSvg: faixaSvg, FAIXAS: FAIXAS, MIN_OBJ: MIN_OBJ, MIN_RED: MIN_RED, montar: montar, cabecalhoAluno: cabecalhoAluno, el: el, sv: sv, norm: norm, pct: pct, ok: ok };
 })();
