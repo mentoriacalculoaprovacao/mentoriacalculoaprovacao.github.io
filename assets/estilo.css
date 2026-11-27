@@ -232,7 +232,10 @@
   .ferr-btns .mini { padding: 4px 0; font-size: 13px; }
   .ferr-btns .mini.perigo { grid-column: 1 / -1; }
   .ferramentas { display: grid; gap: 10px; position: sticky; top: calc(var(--topo-fixo, 0px) + 8px); z-index: 4; box-shadow: 0 6px 18px rgba(16,32,46,.08); }
-  @media (max-height: 760px) { .ferramentas { position: static; } }
+  .editando-rotina .seletor { position: static; }
+  .editando-rotina .ferramentas { top: 6px; }
+  @media (max-height: 760px) { .ferramentas .dica-det { display: none; } .ferramentas { gap: 7px; padding-top: 10px; padding-bottom: 10px; } .ativ { padding: 5px 9px; } }
+  @media (max-height: 520px) { .ferramentas { position: static; } }
   .ferr-linha { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .ferr-rot { font-size: 13px; font-weight: 700; min-width: 4.2rem; }
   .n-linhas { min-width: 1.6rem; text-align: center; font-variant-numeric: tabular-nums; }

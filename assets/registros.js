@@ -553,14 +553,16 @@ window.Registros = (function () {
     return el('div', { class: 'blk', title: textoBloco(c), style: 'background:' + t[2] + ';color:' + t[3] }, [
       tituloComQuebra(tituloBloco(c)), detalheBloco(c) ? el('small', { text: detalheBloco(c) }) : null, c.f ? el('small', { class: 'ate', text: 'até ' + c.f }) : null]);
   }
+  var limparEditor = null; // desfaz o que o editor da rotina põe fora da área dele (fantasma, tecla Esc, seletor fixo)
+  function fecharEditor() { if (limparEditor) { var f = limparEditor; limparEditor = null; f(); } }
   function podeSair() {
-    if (!rotinaSuja) return true;
-    if (window.confirm('A rotina tem alterações não salvas. Sair mesmo assim?')) { rotinaSuja = false; window.onbeforeunload = null; return true; }
-    return false;
+    if (rotinaSuja && !window.confirm('A rotina tem alterações não salvas. Sair mesmo assim?')) return false;
+    rotinaSuja = false; window.onbeforeunload = null; fecharEditor();
+    return true;
   }
 
   function rotina(raiz, c) {
-    rotinaSuja = false; window.onbeforeunload = null;
+    rotinaSuja = false; window.onbeforeunload = null; fecharEditor();
     carregando(raiz, 'Carregando rotina…');
     c.api('rotina', { id: c.id }).then(function (r) {
       if (!r || !r.ok) { falha(raiz, r); return; }
@@ -711,14 +713,14 @@ window.Registros = (function () {
 
       raiz.appendChild(el('div', { class: 'card ferramentas' }, [
         el('div', { class: 'ferr-linha' }, [el('span', { class: 'ferr-rot', text: 'Atividade:' }), paleta]),
-        el('div', { class: 'ferr-linha' }, [el('span', { class: 'ferr-rot', text: 'Detalhe:' }), inDet, el('span', { class: 'nota', style: 'margin:0', text: 'vai junto nos próximos blocos que você colocar' }), avisoPincel]),
+        el('div', { class: 'ferr-linha' }, [el('span', { class: 'ferr-rot', text: 'Detalhe:' }), inDet, el('span', { class: 'nota dica-det', style: 'margin:0', text: 'vai junto nos próximos blocos que você colocar' }), avisoPincel]),
         el('div', { class: 'ferr-linha horas-linha' }, [el('span', { class: 'ferr-rot', text: 'Horário:' }), 'das ', sIni, ' às ', sFim]),
         el('div', { class: 'ferr-linha sel-linha' }, [el('span', { class: 'ferr-rot', text: 'Bloco:' }), selDica, selCampos])
       ]));
 
       var grade = el('div', { class: 'rotina-rolagem grade-edit' });
-      var fixo = document.querySelector('.seletor');
-      document.documentElement.style.setProperty('--topo-fixo', (fixo ? fixo.offsetHeight : 0) + 'px');
+      // Enquanto edita, a lista de mentorados rola junto e só a caixa de atividades fica presa no topo
+      document.body.classList.add('editando-rotina');
       var fantasma = el('div', { class: 'fantasma', 'aria-hidden': 'true' });
       raiz.appendChild(grade);
       document.body.appendChild(fantasma);
@@ -807,7 +809,8 @@ window.Registros = (function () {
       grade.addEventListener('pointerleave', function () { fantasma.style.display = 'none'; });
       var teclaEsc = function (ev) { if (ev.key === 'Escape' && pincel) escolher(null); };
       document.addEventListener('keydown', teclaEsc);
-      function sair() { document.removeEventListener('keydown', teclaEsc); fantasma.remove(); }
+      function sair() { fecharEditor(); }
+      limparEditor = function () { document.removeEventListener('keydown', teclaEsc); fantasma.remove(); document.body.classList.remove('editando-rotina'); };
 
       function mudarHoras(nIni, nFim) {
         if (nFim < nIni) { var tmp = nIni; nIni = nFim; nFim = tmp; sIni.value = String(nIni); sFim.value = String(nFim); }
