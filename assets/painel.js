@@ -182,6 +182,23 @@ window.Painel = (function () {
     sv('rect', { x: x0, y: y0, width: w, height: h, rx: 3, fill: 'none', stroke: f.borda, 'stroke-width': 1.2 }, svg);
     return svg;
   }
+  function semilua(nv) {
+    var R = 80, cx = 100, cy = 96;
+    var pt = function (fr) { var a = Math.PI * (1 - fr); return [cx + R * Math.cos(a), cy - R * Math.sin(a)]; };
+    var arco = function (f0, f1) { var p0 = pt(f0), p1 = pt(f1); return 'M' + p0[0] + ' ' + p0[1] + ' A' + R + ' ' + R + ' 0 0 1 ' + p1[0] + ' ' + p1[1]; };
+    var cor = function (f) { return f.nome === 'Branca' ? '#C9D0DA' : f.cor; };
+    var svg = sv('svg', { viewBox: '0 0 200 112', class: 'semilua-arco', 'aria-hidden': 'true' });
+    sv('path', { d: arco(0, 1), fill: 'none', stroke: '#E7EBF1', 'stroke-width': 16, 'stroke-linecap': 'round' }, svg);
+    if (nv.n && !nv.prox) sv('path', { d: arco(0, 1), fill: 'none', stroke: cor(nv.faixa), 'stroke-width': 16, 'stroke-linecap': 'round' }, svg);
+    else if (nv.n) {
+      var mins = nv.redacao ? MIN_RED : MIN_OBJ, ini = nv.idx ? mins[nv.idx] : (nv.redacao ? BASE_RED : BASE_OBJ);
+      var fr = Math.max(0.02, Math.min(1, (nv.media - ini) / (nv.minProx - ini))), p = pt(fr);
+      sv('path', { d: arco(0, fr), fill: 'none', stroke: cor(nv.prox), 'stroke-width': 16, 'stroke-linecap': 'round' }, svg);
+      sv('circle', { cx: p[0], cy: p[1], r: 7, fill: '#fff', stroke: cor(nv.prox), 'stroke-width': 3 }, svg);
+    }
+    var f = nv.n ? nv.faixa : FAIXAS[0];
+    return el('div', { class: 'semilua', role: 'img', 'aria-label': 'Faixa ' + f.nome.toLowerCase() + (nv.prox && nv.n ? ', a caminho da ' + nv.prox.nome.toLowerCase() : '') }, [svg, faixaSvg(f, false, nv.n ? nv.graus : 0)]);
+  }
   function num(v, red) { return red ? String(Math.round(v)) : (Math.round(v * 10) / 10).toFixed(1).replace('.', ',').replace(',0', ''); }
 
   // ---------- Gráfico de evolução (curvas suaves que passam pelos pontos) ----------
@@ -262,12 +279,13 @@ window.Painel = (function () {
     // Faixas
     raiz.appendChild(el('div', { class: 'sec', text: M ? 'Faixas por área' : 'Suas faixas por área' }));
     var gradeNv = el('div', { class: 'niveis' });
-    // Só as faixas: as regras (conquista, queda, graus) o mentor explica pessoalmente
+    // Semilua: a faixa atual no centro e o arco subindo na cor da próxima, conforme a média chega na meta dela
     r.niveis.forEach(function (nv) {
       var f = nv.n ? nv.faixa : FAIXAS[0];
-      gradeNv.appendChild(el('div', { class: 'card nv' + (nv.n ? '' : ' vazio-nv') }, [faixaSvg(f, false, nv.n ? nv.graus : 0),
+      var apoio = !nv.n ? 'sem simulados' : !nv.prox ? 'faixa máxima' : 'média ' + num(nv.media, nv.redacao) + ' · meta ' + nv.minProx;
+      gradeNv.appendChild(el('div', { class: 'card nv' + (nv.n ? '' : ' vazio-nv') }, [semilua(nv), el('span', { class: 'nv-apoio', text: apoio }),
         el('span', { class: 'nv-area', text: nv.area }),
-        el('span', { class: 'nv-metal', style: 'color:' + (nv.n ? f.texto : '#9AA4B2'), text: nv.n ? 'Faixa ' + f.nome.toLowerCase() : 'Sem simulados' })]));
+        el('span', { class: 'nv-metal', style: 'color:' + (nv.n ? f.texto : '#9AA4B2'), text: nv.n ? 'Faixa ' + f.nome.toLowerCase() : 'Sem faixa' })]));
     });
     raiz.appendChild(el('div', { class: 'card' }, [gradeNv]));
 

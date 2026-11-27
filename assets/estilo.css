@@ -368,7 +368,11 @@
   .corrigidos-sim { font-size: 12.5px; font-weight: 700; color: var(--suave); text-transform: uppercase; letter-spacing: .04em; margin-top: 10px; }
 
   /* ---------- Faixas por área ---------- */
-  .nv .faixa-svg { max-width: 150px; margin: 8px 0 6px; }
+  .semilua { position: relative; width: 100%; max-width: 200px; }
+  .nv .semilua-arco { display: block; width: 100%; max-width: none; height: auto; }
+  .nv .semilua .faixa-svg { max-width: none; }
+  .semilua .faixa-svg { position: absolute; left: 50%; top: 56%; transform: translate(-50%, -50%); width: 58%; }
+  .nv-apoio { font-size: 12px; color: var(--suave); margin-top: 2px; }
   .nv-pontos { display: flex; gap: 5px; margin: 4px 0 1px; }
   .nv-pontos span { width: 10px; height: 10px; border-radius: 50%; background: #E3E7EE; }
   .nv-risco { font-size: 11.5px; font-weight: 600; color: #8A5A0C; background: #FDF1D8; border-radius: 8px; padding: 3px 8px; margin-top: 3px; max-width: 15rem; }
