@@ -225,7 +225,7 @@ function novoServidor(){
   const abas=await p.$$eval('.aba',a=>a.map(x=>x.textContent));
   ok(JSON.stringify(abas)===JSON.stringify(['Painel','Simulados','Caderno de erros','Rotina','Diagnóstico']),'mentor tem Painel, Simulados, Caderno, Rotina e Diagnóstico');
   // base do ENEM: mentor edita no painel e a faixa parte dela
-  ok((await p.textContent('.base-enem')).includes('não informada'),'painel do mentor mostra a base do ENEM (vazia)');
+  ok((await p.textContent('.base-enem')).includes('Cadastrar notas do ENEM'),'painel do mentor oferece cadastrar as notas do ENEM');
   await p.click('.base-enem button');
   await p.fill('.base-form input[aria-label="Linguagens"]','36');await p.fill('.base-form input[aria-label="Matemática"]','18');
   await p.click('text=Salvar base');await p.waitForTimeout(300);

@@ -207,8 +207,9 @@ window.Painel = (function () {
     if (!ctx) return;
     var base = d.base || {};
     var txt = AREAS.map(function (a) { return a[1].replace('Ciências ', '').replace('da ', '') + ' ' + (ok(base[a[0]]) ? base[a[0]] : '—'); }).join(' · ');
-    var linha = el('div', { class: 'base-enem' }, [el('b', { text: 'Base ENEM: ' }), el('span', { text: AREAS.some(function (a) { return ok(base[a[0]]); }) ? txt : 'não informada (a faixa de partida vem dos simulados já lançados)' })]);
-    var bt = el('button', { class: 'mini', type: 'button', text: 'Editar' });
+    var tem = AREAS.some(function (a) { return ok(base[a[0]]); });
+    var linha = el('div', { class: 'base-enem' }, [el('b', { text: 'Notas do ENEM (acertos): ' }), el('span', { text: tem ? txt : 'ainda não cadastradas. Cadastre e a faixa de partida de cada área sai delas.' })]);
+    var bt = el('button', { class: tem ? 'mini' : 'botao peq', type: 'button', text: tem ? 'Editar notas do ENEM' : 'Cadastrar notas do ENEM' });
     linha.appendChild(bt);
     card.appendChild(linha);
     bt.onclick = function () {
@@ -234,7 +235,7 @@ window.Painel = (function () {
           d.base = x.base;
           r.niveis = AREAS.map(function (a) { return nivel(r.sims, a[0], a[1], d.base); });
           desenharFaixas(card, d, r, ctx);
-          if (ctx.aviso) ctx.aviso('Base do ENEM salva. As faixas já partem dela.');
+          if (ctx.aviso) ctx.aviso('Notas do ENEM salvas. As faixas já partem delas.');
         }).catch(function (e) { salvar.disabled = false; salvar.textContent = 'Salvar base'; if (e.message !== 'sessao') erro.textContent = 'Sem conexão. Tente de novo.'; });
       };
     };
